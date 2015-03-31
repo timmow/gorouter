@@ -1,17 +1,19 @@
 package route_fetcher_test
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/cloudfoundry-incubator/routing-api/db"
-	"github.com/cloudfoundry-incubator/routing-api/fake_routing_api"
+	fake_routing_api "github.com/cloudfoundry-incubator/routing-api/fake_routing_api"
 	"github.com/cloudfoundry/gorouter/config"
 	testRegistry "github.com/cloudfoundry/gorouter/registry/fakes"
 	"github.com/cloudfoundry/gorouter/route"
 	"github.com/cloudfoundry/gorouter/token_fetcher"
 	testTokenFetcher "github.com/cloudfoundry/gorouter/token_fetcher/fakes"
 	"github.com/cloudfoundry/gosteno"
+	"github.com/vito/go-sse/sse"
 
 	. "github.com/cloudfoundry/gorouter/route_fetcher"
 
@@ -176,6 +178,137 @@ var _ = Describe("RouteFetcher", func() {
 			time.Sleep(cfg.PruneStaleDropletsInterval + 10*time.Millisecond)
 			Expect(sink.Records()).ToNot(BeNil())
 			Expect(sink.Records()[0].Message).To(Equal("Unauthorized"))
+		})
+
+		It("logs the error", func() {
+			tokenFetcher.FetchTokenReturns(nil, errors.New("Unauthorized"))
+			fetcher.StartFetchCycle()
+
+			time.Sleep(cfg.PruneStaleDropletsInterval + 10*time.Millisecond)
+			Expect(sink.Records()).ToNot(BeNil())
+			Expect(sink.Records()[0].Message).To(Equal("Unauthorized"))
+		})
+	})
+
+	Describe(".StartEventCycle", func() {
+		Context("and the event source successfully subscribes", func() {
+			It("responds to events", func() {
+				eventSource := fake_routing_api.NewFakeEventSource()
+				client.SubscribeToEventsReturns(&eventSource, nil)
+
+				tokenFetcher.FetchTokenReturns(token, nil)
+				fetcher.StartEventCycle()
+
+				eventSource.AddEvent(sse.Event{
+					ID:    "1",
+					Name:  "Delete",
+					Data:  []byte("{\"route\":\"z.a.k\",\"port\":63,\"ip\":\"42.42.42.42\",\"ttl\":1,\"log_guid\":\"Tomato\"}"),
+					Retry: 0,
+				})
+				time.Sleep(1 * time.Millisecond)
+				Expect(registry.UnregisterCallCount()).To(Equal(1))
+				Expect(client.SubscribeToEventsCallCount()).To(Equal(1))
+			})
+
+			It("responds to errors, and retries subscribing", func() {
+				eventSource := fake_routing_api.NewFakeEventSource()
+				client.SubscribeToEventsReturns(&eventSource, nil)
+
+				tokenFetcher.FetchTokenReturns(token, nil)
+				fetcher.StartEventCycle()
+
+				eventSource.AddError(errors.New("beep boop im a robot"))
+				time.Sleep(1 * time.Millisecond)
+				Expect(sink.Records()).ToNot(BeNil())
+				Expect(sink.Records()[0].Message).To(Equal("beep boop im a robot"))
+				Expect(client.SubscribeToEventsCallCount()).To(BeNumerically(">=", 2))
+			})
+		})
+
+		Context("and the event source fails to subscribe", func() {
+			It("logs the error and tries again", func() {
+				err := errors.New("i failed to subscribe")
+				client.SubscribeToEventsReturns(&fake_routing_api.FakeEventSource{}, err)
+
+				tokenFetcher.FetchTokenReturns(token, nil)
+				fetcher.StartEventCycle()
+
+				time.Sleep(1 * time.Millisecond)
+				Expect(sink.Records()).ToNot(BeNil())
+				Expect(sink.Records()[0].Message).To(Equal("i failed to subscribe"))
+			})
+		})
+	})
+
+	Describe(".HandleEvent", func() {
+		Context("When the event is an Upsert", func() {
+			It("registers the route from the registry", func() {
+				eventRoute := db.Route{
+					Route:   "z.a.k",
+					Port:    63,
+					IP:      "42.42.42.42",
+					TTL:     1,
+					LogGuid: "Tomato",
+				}
+
+				data, err := json.Marshal(eventRoute)
+				Expect(err).ToNot(HaveOccurred())
+				event := sse.Event{
+					ID:    "1",
+					Name:  "Upsert",
+					Data:  data,
+					Retry: 0,
+				}
+
+				fetcher.HandleEvent(event)
+				Expect(registry.RegisterCallCount()).To(Equal(1))
+				uri, endpoint := registry.RegisterArgsForCall(0)
+				Expect(uri).To(Equal(route.Uri(eventRoute.Route)))
+				Expect(endpoint).To(Equal(
+					route.NewEndpoint(
+						eventRoute.LogGuid,
+						eventRoute.IP,
+						uint16(eventRoute.Port),
+						eventRoute.LogGuid,
+						nil,
+						eventRoute.TTL,
+					)))
+			})
+		})
+
+		Context("When the vent is a DELETE", func() {
+			It("unregisters the route from the registry", func() {
+				eventRoute := db.Route{
+					Route:   "z.a.k",
+					Port:    63,
+					IP:      "42.42.42.42",
+					TTL:     1,
+					LogGuid: "Tomato",
+				}
+
+				data, err := json.Marshal(eventRoute)
+				Expect(err).ToNot(HaveOccurred())
+				event := sse.Event{
+					ID:    "1",
+					Name:  "Delete",
+					Data:  data,
+					Retry: 0,
+				}
+
+				fetcher.HandleEvent(event)
+				Expect(registry.UnregisterCallCount()).To(Equal(1))
+				uri, endpoint := registry.UnregisterArgsForCall(0)
+				Expect(uri).To(Equal(route.Uri(eventRoute.Route)))
+				Expect(endpoint).To(Equal(
+					route.NewEndpoint(
+						eventRoute.LogGuid,
+						eventRoute.IP,
+						uint16(eventRoute.Port),
+						eventRoute.LogGuid,
+						nil,
+						eventRoute.TTL,
+					)))
+			})
 		})
 	})
 })

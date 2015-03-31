@@ -1,6 +1,7 @@
 package route_fetcher
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/cloudfoundry-incubator/routing-api"
@@ -10,6 +11,7 @@ import (
 	"github.com/cloudfoundry/gorouter/route"
 	"github.com/cloudfoundry/gorouter/token_fetcher"
 	steno "github.com/cloudfoundry/gosteno"
+	"github.com/vito/go-sse/sse"
 )
 
 type RouteFetcher struct {
@@ -50,6 +52,47 @@ func (r *RouteFetcher) StartFetchCycle() {
 			}
 		}()
 	}
+}
+
+func (r *RouteFetcher) StartEventCycle() {
+	go func() {
+		for {
+			source, err := r.client.SubscribeToEvents()
+			if err != nil {
+				r.logger.Error(err.Error())
+				continue
+			}
+
+			for {
+				event, err := source.Next()
+				if err != nil {
+					r.logger.Error(err.Error())
+					break
+				}
+				r.HandleEvent(event)
+			}
+		}
+	}()
+}
+
+func (r *RouteFetcher) HandleEvent(e sse.Event) error {
+	var eventRoute db.Route
+
+	err := json.Unmarshal(e.Data, &eventRoute)
+	if err != nil {
+		return err
+	}
+
+	uri := route.Uri(eventRoute.Route)
+	endpoint := route.NewEndpoint(eventRoute.LogGuid, eventRoute.IP, uint16(eventRoute.Port), eventRoute.LogGuid, nil, eventRoute.TTL)
+	switch e.Name {
+	case "Delete":
+		r.RouteRegistry.Unregister(uri, endpoint)
+	case "Upsert":
+		r.RouteRegistry.Register(uri, endpoint)
+	}
+
+	return nil
 }
 
 func (r *RouteFetcher) FetchRoutes() error {

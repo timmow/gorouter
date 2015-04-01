@@ -89,7 +89,7 @@ func main() {
 		tokenFetcher := token_fetcher.NewTokenFetcher(&c.OAuth)
 		routingApiUri := fmt.Sprintf("%s:%d", c.RoutingApi.Uri, c.RoutingApi.Port)
 		routingApiClient := routing_api.NewClient(routingApiUri)
-		routeFetcher := route_fetcher.NewRouteFetcher(steno.NewLogger("router.route_fetcher"), tokenFetcher, registry, c, routingApiClient)
+		routeFetcher := route_fetcher.NewRouteFetcher(steno.NewLogger("router.route_fetcher"), tokenFetcher, registry, c, routingApiClient, 1)
 		routeFetcher.StartFetchCycle()
 		routeFetcher.StartEventCycle()
 	}

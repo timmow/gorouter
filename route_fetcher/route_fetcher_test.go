@@ -1,10 +1,10 @@
 package route_fetcher_test
 
 import (
-	"encoding/json"
 	"errors"
 	"time"
 
+	"github.com/cloudfoundry-incubator/routing-api"
 	"github.com/cloudfoundry-incubator/routing-api/db"
 	fake_routing_api "github.com/cloudfoundry-incubator/routing-api/fake_routing_api"
 	"github.com/cloudfoundry/gorouter/config"
@@ -13,7 +13,6 @@ import (
 	"github.com/cloudfoundry/gorouter/token_fetcher"
 	testTokenFetcher "github.com/cloudfoundry/gorouter/token_fetcher/fakes"
 	"github.com/cloudfoundry/gosteno"
-	"github.com/vito/go-sse/sse"
 
 	. "github.com/cloudfoundry/gorouter/route_fetcher"
 
@@ -23,13 +22,14 @@ import (
 
 var _ = Describe("RouteFetcher", func() {
 	var (
-		cfg          *config.Config
-		tokenFetcher *testTokenFetcher.FakeTokenFetcher
-		registry     *testRegistry.FakeRegistryInterface
-		fetcher      *RouteFetcher
-		logger       *gosteno.Logger
-		sink         *gosteno.TestingSink
-		client       *fake_routing_api.FakeClient
+		cfg           *config.Config
+		tokenFetcher  *testTokenFetcher.FakeTokenFetcher
+		registry      *testRegistry.FakeRegistryInterface
+		fetcher       *RouteFetcher
+		logger        *gosteno.Logger
+		sink          *gosteno.TestingSink
+		client        *fake_routing_api.FakeClient
+		retryInterval int
 
 		token *token_fetcher.Token
 
@@ -39,6 +39,7 @@ var _ = Describe("RouteFetcher", func() {
 	BeforeEach(func() {
 		cfg = config.DefaultConfig()
 
+		retryInterval := 0
 		tokenFetcher = &testTokenFetcher.FakeTokenFetcher{}
 		registry = &testRegistry.FakeRegistryInterface{}
 		sink = gosteno.NewTestingSink()
@@ -57,7 +58,7 @@ var _ = Describe("RouteFetcher", func() {
 		}
 
 		client = &fake_routing_api.FakeClient{}
-		fetcher = NewRouteFetcher(logger, tokenFetcher, registry, cfg, client)
+		fetcher = NewRouteFetcher(logger, tokenFetcher, registry, cfg, client, retryInterval)
 	})
 
 	Describe(".FetchRoutes", func() {
@@ -157,7 +158,7 @@ var _ = Describe("RouteFetcher", func() {
 	Describe(".StartFetchCycle", func() {
 		BeforeEach(func() {
 			cfg.PruneStaleDropletsInterval = 10 * time.Millisecond
-			fetcher = NewRouteFetcher(logger, tokenFetcher, registry, cfg, client)
+			fetcher = NewRouteFetcher(logger, tokenFetcher, registry, cfg, client, retryInterval)
 
 			tokenFetcher.FetchTokenReturns(token, nil)
 
@@ -199,7 +200,9 @@ var _ = Describe("RouteFetcher", func() {
 				time.Sleep(1 * time.Millisecond)
 				Expect(sink.Records()).ToNot(BeNil())
 				Expect(sink.Records()[0].Message).To(Equal("failed to get the token"))
-				Expect(tokenFetcher.FetchTokenCallCount()).To(BeNumerically(">=", 2))
+				Eventually(func() int {
+					return tokenFetcher.FetchTokenCallCount()
+				}, 1).Should(BeNumerically(">=", 2))
 			})
 		})
 
@@ -211,12 +214,16 @@ var _ = Describe("RouteFetcher", func() {
 				tokenFetcher.FetchTokenReturns(token, nil)
 				fetcher.StartEventCycle()
 
-				eventSource.AddEvent(sse.Event{
-					ID:    "1",
-					Name:  "Delete",
-					Data:  []byte("{\"route\":\"z.a.k\",\"port\":63,\"ip\":\"42.42.42.42\",\"ttl\":1,\"log_guid\":\"Tomato\"}"),
-					Retry: 0,
-				})
+				eventSource.AddEvent(routing_api.Event{
+					Action: "Delete",
+					Route: db.Route{
+						Route:   "z.a.k",
+						Port:    63,
+						IP:      "42.42.42.42",
+						TTL:     1,
+						LogGuid: "Tomato",
+					}})
+
 				time.Sleep(1 * time.Millisecond)
 				Expect(registry.UnregisterCallCount()).To(Equal(1))
 				Expect(client.SubscribeToEventsCallCount()).To(Equal(1))
@@ -230,10 +237,15 @@ var _ = Describe("RouteFetcher", func() {
 				fetcher.StartEventCycle()
 
 				eventSource.AddError(errors.New("beep boop im a robot"))
+
 				time.Sleep(1 * time.Millisecond)
+
 				Expect(sink.Records()).ToNot(BeNil())
 				Expect(sink.Records()[0].Message).To(Equal("beep boop im a robot"))
-				Expect(client.SubscribeToEventsCallCount()).To(BeNumerically(">=", 2))
+				Eventually(func() int {
+					return tokenFetcher.FetchTokenCallCount()
+				}, 1).Should(BeNumerically(">=", 2))
+				Expect(eventSource.Closed).To(BeTrue())
 			})
 		})
 
@@ -246,6 +258,7 @@ var _ = Describe("RouteFetcher", func() {
 				fetcher.StartEventCycle()
 
 				time.Sleep(1 * time.Millisecond)
+
 				Expect(sink.Records()).ToNot(BeNil())
 				Expect(sink.Records()[0].Message).To(Equal("i failed to subscribe"))
 			})
@@ -263,13 +276,9 @@ var _ = Describe("RouteFetcher", func() {
 					LogGuid: "Tomato",
 				}
 
-				data, err := json.Marshal(eventRoute)
-				Expect(err).ToNot(HaveOccurred())
-				event := sse.Event{
-					ID:    "1",
-					Name:  "Upsert",
-					Data:  data,
-					Retry: 0,
+				event := routing_api.Event{
+					Action: "Upsert",
+					Route:  eventRoute,
 				}
 
 				fetcher.HandleEvent(event)
@@ -288,7 +297,7 @@ var _ = Describe("RouteFetcher", func() {
 			})
 		})
 
-		Context("When the vent is a DELETE", func() {
+		Context("When the event is a DELETE", func() {
 			It("unregisters the route from the registry", func() {
 				eventRoute := db.Route{
 					Route:   "z.a.k",
@@ -298,13 +307,9 @@ var _ = Describe("RouteFetcher", func() {
 					LogGuid: "Tomato",
 				}
 
-				data, err := json.Marshal(eventRoute)
-				Expect(err).ToNot(HaveOccurred())
-				event := sse.Event{
-					ID:    "1",
-					Name:  "Delete",
-					Data:  data,
-					Retry: 0,
+				event := routing_api.Event{
+					Action: "Delete",
+					Route:  eventRoute,
 				}
 
 				fetcher.HandleEvent(event)

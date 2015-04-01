@@ -191,6 +191,18 @@ var _ = Describe("RouteFetcher", func() {
 	})
 
 	Describe(".StartEventCycle", func() {
+		Context("when fetching the auth token fails", func() {
+			It("logs the failure and tries again", func() {
+				tokenFetcher.FetchTokenReturns(nil, errors.New("failed to get the token"))
+				fetcher.StartEventCycle()
+
+				time.Sleep(1 * time.Millisecond)
+				Expect(sink.Records()).ToNot(BeNil())
+				Expect(sink.Records()[0].Message).To(Equal("failed to get the token"))
+				Expect(tokenFetcher.FetchTokenCallCount()).To(BeNumerically(">=", 2))
+			})
+		})
+
 		Context("and the event source successfully subscribes", func() {
 			It("responds to events", func() {
 				eventSource := fake_routing_api.NewFakeEventSource()

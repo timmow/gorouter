@@ -57,6 +57,12 @@ func (r *RouteFetcher) StartFetchCycle() {
 func (r *RouteFetcher) StartEventCycle() {
 	go func() {
 		for {
+			token, err := r.TokenFetcher.FetchToken()
+			if err != nil {
+				r.logger.Error(err.Error())
+				continue
+			}
+			r.client.SetToken(token.AccessToken)
 			source, err := r.client.SubscribeToEvents()
 			if err != nil {
 				r.logger.Error(err.Error())

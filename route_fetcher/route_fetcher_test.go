@@ -208,56 +208,72 @@ var _ = Describe("RouteFetcher", func() {
 
 		Context("and the event source successfully subscribes", func() {
 			It("responds to events", func() {
-				eventSource := fake_routing_api.NewFakeEventSource()
+				eventSource := fake_routing_api.FakeEventSource{}
 				client.SubscribeToEventsReturns(&eventSource, nil)
 
 				tokenFetcher.FetchTokenReturns(token, nil)
 				fetcher.StartEventCycle()
 
-				eventSource.AddEvent(routing_api.Event{
-					Action: "Delete",
-					Route: db.Route{
-						Route:   "z.a.k",
-						Port:    63,
-						IP:      "42.42.42.42",
-						TTL:     1,
-						LogGuid: "Tomato",
-					}})
+				received := make(chan struct{})
 
-				time.Sleep(1 * time.Millisecond)
+				eventSource.NextStub = func() (routing_api.Event, error) {
+					received <- struct{}{}
+					event := routing_api.Event{
+						Action: "Delete",
+						Route: db.Route{
+							Route:   "z.a.k",
+							Port:    63,
+							IP:      "42.42.42.42",
+							TTL:     1,
+							LogGuid: "Tomato",
+						}}
+					return event, nil
+				}
+
+				<-received
+
 				Expect(registry.UnregisterCallCount()).To(Equal(1))
 				Expect(client.SubscribeToEventsCallCount()).To(Equal(1))
 			})
 
 			It("responds to errors, and retries subscribing", func() {
-				eventSource := fake_routing_api.NewFakeEventSource()
+				eventSource := fake_routing_api.FakeEventSource{}
 				client.SubscribeToEventsReturns(&eventSource, nil)
 
 				tokenFetcher.FetchTokenReturns(token, nil)
 				fetcher.StartEventCycle()
 
-				eventSource.AddError(errors.New("beep boop im a robot"))
+				received := make(chan struct{})
 
-				time.Sleep(1 * time.Millisecond)
+				eventSource.NextStub = func() (routing_api.Event, error) {
+					received <- struct{}{}
+					return routing_api.Event{}, errors.New("beep boop im a robot")
+				}
+
+				<-received
 
 				Expect(sink.Records()).ToNot(BeNil())
 				Expect(sink.Records()[1].Message).To(Equal("beep boop im a robot"))
 				Eventually(func() int {
 					return tokenFetcher.FetchTokenCallCount()
 				}, 1).Should(BeNumerically(">=", 2))
-				Expect(eventSource.Closed).To(BeTrue())
+				Expect(eventSource.CloseCallCount()).To(Equal(1))
 			})
 		})
 
 		Context("and the event source fails to subscribe", func() {
 			It("logs the error and tries again", func() {
-				err := errors.New("i failed to subscribe")
-				client.SubscribeToEventsReturns(&fake_routing_api.FakeEventSource{}, err)
+				subscribed := make(chan struct{})
+				client.SubscribeToEventsStub = func() (routing_api.EventSource, error) {
+					subscribed <- struct{}{}
+					err := errors.New("i failed to subscribe")
+					return &fake_routing_api.FakeEventSource{}, err
+				}
 
 				tokenFetcher.FetchTokenReturns(token, nil)
 				fetcher.StartEventCycle()
 
-				time.Sleep(1 * time.Millisecond)
+				<-subscribed
 
 				Expect(sink.Records()).ToNot(BeNil())
 				Expect(sink.Records()[0].Message).To(Equal("i failed to subscribe"))

@@ -241,7 +241,7 @@ var _ = Describe("RouteFetcher", func() {
 				time.Sleep(1 * time.Millisecond)
 
 				Expect(sink.Records()).ToNot(BeNil())
-				Expect(sink.Records()[0].Message).To(Equal("beep boop im a robot"))
+				Expect(sink.Records()[1].Message).To(Equal("beep boop im a robot"))
 				Eventually(func() int {
 					return tokenFetcher.FetchTokenCallCount()
 				}, 1).Should(BeNumerically(">=", 2))

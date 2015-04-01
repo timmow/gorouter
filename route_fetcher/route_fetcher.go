@@ -76,6 +76,8 @@ func (r *RouteFetcher) subscribeToEvents() {
 		return
 	}
 
+	r.logger.Info("Successfully subscribed to event stream.")
+
 	defer source.Close()
 
 	for {
@@ -89,6 +91,7 @@ func (r *RouteFetcher) subscribeToEvents() {
 }
 
 func (r *RouteFetcher) HandleEvent(e routing_api.Event) error {
+	r.logger.Infof("Handling event: %v", e)
 	eventRoute := e.Route
 	uri := route.Uri(eventRoute.Route)
 	endpoint := route.NewEndpoint(eventRoute.LogGuid, eventRoute.IP, uint16(eventRoute.Port), eventRoute.LogGuid, nil, eventRoute.TTL)
@@ -99,6 +102,7 @@ func (r *RouteFetcher) HandleEvent(e routing_api.Event) error {
 		r.RouteRegistry.Register(uri, endpoint)
 	}
 
+	r.logger.Infof("Successfully handled event: %v", e)
 	return nil
 }
 

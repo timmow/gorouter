@@ -86,6 +86,7 @@ func main() {
 	registry := rregistry.NewRouteRegistry(c, natsClient)
 
 	if c.RoutingApiEnabled() {
+		logger.Info("Setting up routing_api route fetcher")
 		tokenFetcher := token_fetcher.NewTokenFetcher(&c.OAuth)
 		routingApiUri := fmt.Sprintf("%s:%d", c.RoutingApi.Uri, c.RoutingApi.Port)
 		routingApiClient := routing_api.NewClient(routingApiUri)

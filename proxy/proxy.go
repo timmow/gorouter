@@ -268,6 +268,7 @@ func newReverseProxy(proxyTransport http.RoundTripper, req *http.Request,
 
 	return rproxy
 }
+
 func SetupProxyRequest(source *http.Request, target *http.Request,
 	routeServiceArgs route_service.RouteServiceArgs,
 	routeServiceConfig *route_service.RouteServiceConfig) {
@@ -288,65 +289,12 @@ func SetupProxyRequest(source *http.Request, target *http.Request,
 		target.Header.Del(route_service.RouteServiceSignature)
 		target.Header.Del(route_service.RouteServiceMetadata)
 	}
-
 }
 
-type ProxyRoundTripper struct {
-	Transport      http.RoundTripper
-	After          AfterRoundTrip
-	Iter           route.EndpointIterator
-	Handler        *RequestHandler
-	ServingBackend bool
-}
-
-func (p *ProxyRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
-	var err error
-	var res *http.Response
-	var endpoint *route.Endpoint
-	retry := 0
-	for {
-		if p.ServingBackend {
-			endpoint = p.Iter.Next()
-
-			if endpoint == nil {
-				p.Handler.reporter.CaptureBadGateway(request)
-				err = noEndpointsAvailable
-				p.Handler.HandleBadGateway(err)
-				return nil, err
-			}
-			p.setupBackendRequest(request, endpoint)
-		} else {
-			endpoint = &route.Endpoint{
-				Tags: map[string]string{},
-			}
-		}
-
-		res, err = p.Transport.RoundTrip(request)
-		if err == nil {
-			break
-		}
-		if ne, netErr := err.(*net.OpError); !netErr || ne.Op != "dial" {
-			break
-		}
-
-		if p.ServingBackend {
-			p.Iter.EndpointFailed()
-		}
-
-		p.Handler.Logger().Set("Error", err.Error())
-		p.Handler.Logger().Warnf("proxy.endpoint.failed")
-
-		retry++
-		if retry == retries {
-			break
-		}
+func newRouteServiceEndpoint() *route.Endpoint {
+	return &route.Endpoint{
+		Tags: map[string]string{},
 	}
-
-	if p.After != nil {
-		p.After(res, endpoint, err)
-	}
-
-	return res, err
 }
 
 type wrappedIterator struct {
@@ -386,8 +334,8 @@ func validateRouteServiceRequest(routeServiceConfig *route_service.RouteServiceC
 	return routeServiceArgs, nil
 }
 
-func (p *ProxyRoundTripper) setupBackendRequest(request *http.Request, endpoint *route.Endpoint) {
-	p.Handler.Logger().Debug("proxy.backend")
+func (be *BackendRoundTripper) setupBackendRequest(request *http.Request, endpoint *route.Endpoint) {
+	be.Handler.Logger().Debug("proxy.backend")
 
 	request.URL.Host = endpoint.CanonicalAddr()
 	request.Header.Set("X-CF-ApplicationID", endpoint.ApplicationId)

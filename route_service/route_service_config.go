@@ -2,7 +2,6 @@ package route_service
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"time"

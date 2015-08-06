@@ -18,7 +18,7 @@ import (
 )
 
 var _ = Describe("ProxyRoundTripper", func() {
-	FContext("RoundTrip", func() {
+	Context("RoundTrip", func() {
 		var (
 			proxyRoundTripper *proxy.ProxyRoundTripper
 			endpointIterator  *routefakes.FakeEndpointIterator

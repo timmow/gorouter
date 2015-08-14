@@ -66,10 +66,11 @@ func (rs *RouteServiceConfig) SetupRouteServiceRequest(request *http.Request, ar
 	rs.logger.Debug("proxy.route-service")
 	request.Header.Set(RouteServiceSignature, args.Signature)
 	request.Header.Set(RouteServiceMetadata, args.Metadata)
-	request.Header.Set(RouteServiceForwardedUrl, args.ForwardedUrlRaw)
+	request.Header.Set("ProxyHost", args.ParsedUrl.Host)
+
+	request.URL.Opaque = args.ForwardedUrlRaw
 
 	request.Host = args.ParsedUrl.Host
-	request.URL = args.ParsedUrl
 }
 
 func (rs *RouteServiceConfig) ValidateSignature(headers *http.Header) error {
@@ -92,12 +93,7 @@ func (rs *RouteServiceConfig) ValidateSignature(headers *http.Header) error {
 		return err
 	}
 
-	err = rs.validateSignatureTimeout(signature)
-	if err != nil {
-		return err
-	}
-
-	return rs.validateForwardedUrl(signature, headers)
+	return rs.validateSignatureTimeout(signature)
 }
 
 func (rs *RouteServiceConfig) validateSignatureTimeout(signature Signature) error {

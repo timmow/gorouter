@@ -127,7 +127,19 @@ func (p *proxy) getStickySession(request *http.Request) string {
 }
 
 func (p *proxy) lookup(request *http.Request) *route.Pool {
-	uri := route.Uri(hostWithoutPort(request) + request.RequestURI)
+	proxyHost := request.Header.Get("ProxyHost")
+
+	if proxyHost != "" {
+		request.Host = proxyHost
+		request.Header.Del("ProxyHost")
+	}
+
+	path := request.RequestURI
+	if !strings.HasPrefix(path, "/") {
+		path = request.URL.Path
+	}
+
+	uri := route.Uri(hostWithoutPort(request) + path)
 	return p.registry.Lookup(uri)
 }
 

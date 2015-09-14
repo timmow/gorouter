@@ -12,6 +12,12 @@ function printStatus {
 
 trap printStatus EXIT
 
+
+
+df -k
+
+
+
 . $(dirname $0)/gorequired
 
 #Download & Install gnatsd into GOPATH (or use pre-installed version)

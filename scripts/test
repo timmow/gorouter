@@ -24,7 +24,5 @@ go get -v github.com/apcera/gnatsd
 #Install ginkgo from Godeps into Godeps workspace
 go install -v github.com/onsi/ginkgo/ginkgo
 
-df -k
-
 #Run all tests
 ginkgo -r -failOnPending -randomizeAllSpecs -skipMeasurements=true -race "$@"

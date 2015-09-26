@@ -3,6 +3,7 @@ package proxy
 import (
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -155,11 +156,13 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 
 	if !isProtocolSupported(request) {
 		handler.HandleUnsupportedProtocol()
+		fmt.Println("Exit at 1")
 		return
 	}
 
 	if isLoadBalancerHeartbeat(request) {
 		handler.HandleHeartbeat()
+		fmt.Println("Exit at 2")
 		return
 	}
 
@@ -167,6 +170,7 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 	if routePool == nil {
 		p.reporter.CaptureBadRequest(request)
 		handler.HandleMissingRoute()
+		fmt.Println("Exit at 3")
 		return
 	}
 
@@ -185,11 +189,13 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 
 	if isTcpUpgrade(request) {
 		handler.HandleTcpRequest(iter)
+		fmt.Println("Exit at 4")
 		return
 	}
 
 	if isWebSocketUpgrade(request) {
 		handler.HandleWebSocketRequest(iter)
+		fmt.Println("Exit at 5")
 		return
 	}
 
@@ -199,6 +205,7 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 	// Attempted to use a route service when it is not supported
 	if routeServiceUrl != "" && !p.routeServiceConfig.RouteServiceEnabled() {
 		handler.HandleUnsupportedRouteService()
+		fmt.Println("Exit at 6")
 		return
 	}
 
@@ -211,6 +218,7 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 			err := p.routeServiceConfig.ValidateSignature(&request.Header)
 			if err != nil {
 				handler.HandleBadSignature(err)
+				fmt.Println("Exit at 7")
 				return
 			}
 		} else {
@@ -222,6 +230,7 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 			backend = false
 			if err != nil {
 				handler.HandleRouteServiceFailure(err)
+				fmt.Println("Exit at 8")
 				return
 			}
 		}
@@ -244,6 +253,7 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 		if err != nil {
 			p.reporter.CaptureBadGateway(request)
 			handler.HandleBadGateway(err)
+			fmt.Println("Exit at 9")
 			return
 		}
 
@@ -398,6 +408,7 @@ func isWebSocketUpgrade(request *http.Request) bool {
 }
 
 func isTcpUpgrade(request *http.Request) bool {
+	fmt.Printf("%#v\n", request)
 	return upgradeHeader(request) == "tcp"
 }
 

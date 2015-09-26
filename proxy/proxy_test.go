@@ -729,6 +729,73 @@ var _ = Describe("Proxy", func() {
 		conn.Close()
 	})
 
+	FIt("Record the FinishedAt timestamp for the log", func() {
+		done := make(chan bool)
+
+		ln := registerHandler(r, "tcp-handler", func(conn *test_util.HttpConn) {
+			conn.WriteLine("hello")
+			conn.CheckLine("hello from client")
+			conn.WriteLine("hello from server")
+			conn.Close()
+
+			req, err := http.ReadRequest(conn.Reader)
+			Ω(err).NotTo(HaveOccurred())
+
+			done <- req.Header.Get("Upgrade") == "tcp" &&
+				req.Header.Get("Connection") == "UpgradE"
+
+			resp := test_util.NewResponse(http.StatusSwitchingProtocols)
+			resp.Header.Set("Upgrade", "tcp")
+			resp.Header.Set("Connection", "UpgradE")
+
+			conn.WriteResponse(resp)
+
+			conn.CheckLine("hello from client")
+			conn.WriteLine("hello from server")
+			conn.Close()
+		})
+		defer ln.Close()
+
+		conn := dialProxy(proxyServer)
+
+		req := test_util.NewRequest("GET", "tcp-handler", "/chat", nil)
+		req.Header.Set("Upgrade", "tcp")
+
+		req.Header.Set("Connection", "UpgradE")
+
+		conn.WriteRequest(req)
+
+		var answer bool
+		Eventually(done).Should(Receive(&answer))
+		Expect(answer).To(BeTrue())
+
+		resp, _ := conn.ReadResponse()
+		Expect(resp.StatusCode).To(Equal(http.StatusSwitchingProtocols))
+
+		var payload []byte
+		Eventually(func() int {
+			accessLogFile.Read(&payload)
+			return len(payload)
+		}).ShouldNot(BeZero())
+
+		//make sure the record includes all the data
+		//since the building of the log record happens throughout the life of the request
+		Expect(strings.HasPrefix(string(payload), "test - [")).To(BeTrue())
+		Expect(string(payload)).To(ContainSubstring(`"POST / HTTP/1.1" 200 4 4 "-"`))
+		Expect(string(payload)).To(ContainSubstring(`x_forwarded_for:"127.0.0.1" x_forwarded_proto:"-" vcap_request_id:`))
+		Expect(string(payload)).To(ContainSubstring(`response_time:`))
+
+		Expect(string(payload)).NotTo(ContainSubstring(`response_time:MissingFinishedAt`))
+		Expect(string(payload)).To(ContainSubstring(`app_id:`))
+		Expect(payload[len(payload)-1]).To(Equal(byte('\n')))
+
+		conn.CheckLine("hello")
+		conn.WriteLine("hello from client")
+		conn.CheckLine("hello from server")
+
+		conn.Close()
+	})
+
 	It("transfers chunked encodings", func() {
 		ln := registerHandler(r, "chunk", func(conn *test_util.HttpConn) {
 			r, w := io.Pipe()

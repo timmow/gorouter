@@ -4,10 +4,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"time"
+	"os"
 
 	"github.com/cloudfoundry/gorouter/access_log"
 	vcap "github.com/cloudfoundry/gorouter/common"
 	cfg "github.com/cloudfoundry/gorouter/config"
+	"github.com/cloudfoundry/gorouter/metrics/fakes"
 	"github.com/cloudfoundry/gorouter/proxy"
 	rregistry "github.com/cloudfoundry/gorouter/registry"
 	"github.com/cloudfoundry/gorouter/route"
@@ -19,7 +21,6 @@ import (
 	"github.com/cloudfoundry/yagnats"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/cloudfoundry/gorouter/metrics/fakes"
 )
 
 var _ = Describe("Router", func() {
@@ -58,7 +59,9 @@ var _ = Describe("Router", func() {
 		r, err := NewRouter(config, proxy, mbusClient, registry, varz, logcounter)
 		Expect(err).ToNot(HaveOccurred())
 		router = r
-		r.Run()
+		signals := make(chan os.Signal)
+		readyChan := make(chan struct{})
+		r.Run(signals, readyChan)
 	})
 
 	AfterEach(func() {

@@ -29,6 +29,9 @@ import (
 	"time"
 
 	"github.com/cloudfoundry/gorouter/metrics"
+	"github.com/tedsuo/ifrit"
+	"github.com/tedsuo/ifrit/grouper"
+	"github.com/tedsuo/ifrit/sigmon"
 )
 
 var configFile string
@@ -99,11 +102,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	errChan := router.Run()
+	launchRouter2(c, router, logger)
+}
+
+func launchRouter(c *config.Config, router *router.Router, logger *steno.Logger) {
+
+	errChan := router.Run2()
 
 	logger.Info("gorouter.started")
 
 	waitOnErrOrSignal(c, logger, errChan, router)
+
+	os.Exit(0)
+
+}
+
+func launchRouter2(c *config.Config, router *router.Router, logger *steno.Logger) {
+	members := grouper.Members{
+		{"router", router},
+	}
+
+	group := grouper.NewOrdered(os.Interrupt, members)
+
+	monitor := ifrit.Invoke(sigmon.New(group, syscall.SIGTERM, syscall.SIGINT, syscall.SIGUSR1))
+
+	logger.Info("gorouter.started")
+
+	err := <-monitor.Wait()
+	if err != nil {
+		logger.Error("gorouter.exited-with-failure")
+		os.Exit(1)
+	}
+
+	logger.Info("gorouter.exited")
 
 	os.Exit(0)
 }

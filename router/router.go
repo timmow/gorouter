@@ -1,7 +1,10 @@
 package router
 
 import (
+	"os"
 	"sync"
+	"syscall"
+	// "os/signal"
 
 	"github.com/apcera/nats"
 	"github.com/cloudfoundry/dropsonde"
@@ -101,7 +104,111 @@ func NewRouter(cfg *config.Config, p proxy.Proxy, mbusClient yagnats.NATSConn, r
 	return router, nil
 }
 
-func (r *Router) Run() <-chan error {
+func (r *Router) Run(signals <-chan os.Signal, ready chan<- struct{}) error {
+	r.registry.StartPruningCycle()
+
+	close(ready)
+
+	r.RegisterComponent()
+
+	// Subscribe register/unregister router
+	r.SubscribeRegister()
+	r.HandleGreetings()
+	r.SubscribeUnregister()
+
+	// Kickstart sending start messages
+	r.SendStartMessage()
+
+	r.mbusClient.AddReconnectedCB(func(conn *nats.Conn) {
+		r.logger.Infof("Reconnecting to NATS server %s...", conn.Opts.Url)
+		r.SendStartMessage()
+	})
+
+	// Schedule flushing active app's app_id
+	r.ScheduleFlushApps()
+
+	// Wait for one start message send interval, such that the router's registry
+	// can be populated before serving requests.
+	if r.config.StartResponseDelayInterval != 0 {
+		r.logger.Infof("Waiting %s before listening...", r.config.StartResponseDelayInterval)
+		time.Sleep(r.config.StartResponseDelayInterval)
+	}
+
+	server := &http.Server{
+		Handler:   dropsonde.InstrumentedHandler(r.proxy),
+		ConnState: r.HandleConnState,
+	}
+
+	errChan := make(chan error, 2)
+
+	err := r.serveHTTP(server, errChan)
+	if err != nil {
+		errChan <- err
+		return err
+	}
+	err = r.serveHTTPS(server, errChan)
+	if err != nil {
+		errChan <- err
+		return err
+	}
+
+	r.OnErrOrSignal(signals, errChan)
+
+	return nil
+}
+
+func (r *Router) OnErrOrSignal(signals <-chan os.Signal, errChan <-chan error) {
+	select {
+	case err := <-errChan:
+		if err != nil {
+			r.logger.Errorf("Error occurred: %s", err.Error())
+			r.DrainAndStop()
+		}
+	case sig := <-signals:
+		go func() {
+			for sig := range signals {
+				r.logger.Infod(
+					map[string]interface{}{
+						"signal": sig.String(),
+					},
+					"gorouter.signal.ignored",
+				)
+			}
+		}()
+
+		if sig == syscall.SIGUSR1 {
+			r.DrainAndStop()
+		}
+	}
+}
+
+func (r *Router) DrainAndStop() {
+	drainTimeout := r.config.DrainTimeout
+	r.logger.Infod(
+		map[string]interface{}{
+			"timeout": (drainTimeout).String(),
+		},
+		"gorouter.draining",
+	)
+
+	r.Drain(drainTimeout)
+	stoppingAt := time.Now()
+
+	r.logger.Info("gorouter.stopping")
+
+	r.Stop()
+
+	r.logger.Infod(
+		map[string]interface{}{
+			"took": time.Since(stoppingAt).String(),
+		},
+		"gorouter.stopped",
+	)
+
+}
+
+//  WIP: Keeping the old version around for reference
+func (r *Router) Run2() <-chan error {
 	r.registry.StartPruningCycle()
 
 	r.RegisterComponent()

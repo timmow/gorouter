@@ -184,6 +184,9 @@ func (r *Router) OnErrOrSignal(signals <-chan os.Signal, errChan chan error) {
 		}()
 		if sig == syscall.SIGUSR1 {
 			r.DrainAndStop()
+		} else {
+			fmt.Println("*************** Stopping not draining router")
+			r.Stop()
 		}
 	}
 	r.logger.Info("gorouter.exited")

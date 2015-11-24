@@ -3,8 +3,10 @@ package router_test
 import (
 	"io/ioutil"
 	"net/http"
-	"time"
 	"os"
+	"time"
+
+	"errors"
 
 	"github.com/cloudfoundry/gorouter/access_log"
 	vcap "github.com/cloudfoundry/gorouter/common"
@@ -32,6 +34,7 @@ var _ = Describe("Router", func() {
 	var varz vvarz.Varz
 	var router *Router
 	var natsPort uint16
+	var errChan chan error
 
 	BeforeEach(func() {
 		natsPort = test_util.NextAvailPort()
@@ -56,28 +59,36 @@ var _ = Describe("Router", func() {
 			Reporter:        varz,
 			AccessLogger:    &access_log.NullAccessLogger{},
 		})
-		r, err := NewRouter(config, proxy, mbusClient, registry, varz, logcounter)
+
+		errChan = make(chan error, 2)
+		r, err := NewRouter(config, proxy, mbusClient, registry, varz, logcounter, errChan)
 		Expect(err).ToNot(HaveOccurred())
 		router = r
+
 		signals := make(chan os.Signal)
 		readyChan := make(chan struct{})
-		r.Run(signals, readyChan)
+		go r.Run(signals, readyChan)
+		select {
+		case <-readyChan:
+		}
 	})
 
 	AfterEach(func() {
 		if natsRunner != nil {
 			natsRunner.Stop()
 		}
-
-		if router != nil {
-			router.Stop()
-		}
 	})
 
 	Context("Drain", func() {
+
+		AfterEach(func() {
+			if router != nil {
+				router.Stop()
+			}
+		})
+
 		It("waits until the last request completes", func() {
 			app := test.NewTestApp([]route.Uri{"drain.vcap.me"}, config.Port, mbusClient, nil, "")
-
 			blocker := make(chan bool)
 			resultCh := make(chan bool, 2)
 			app.AddHandler("/", func(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +127,6 @@ var _ = Describe("Router", func() {
 			}()
 
 			<-blocker
-
 			go func() {
 				defer GinkgoRecover()
 				err := router.Drain(drainTimeout)
@@ -176,6 +186,80 @@ var _ = Describe("Router", func() {
 			var result error
 			Eventually(resultCh).Should(Receive(&result))
 			Expect(result).To(Equal(DrainTimeout))
+		})
+	})
+
+	Context("OnErrOrSignal", func() {
+				/*
+			- when an error is received in the error chan, it drains existing connections
+			when a USR1 signal is sent, it drains and stops the router
+			when a term signal is sent, it stops the router
+			when a interruption signal is sent, it stops the router
+			when USR1 is the first of multiple signals, it drains and stops the router
+			when USR1 is not the first of multiple signals, it stops the router
+			when a non handled signal is sent, it does nothing.
+		*/
+
+		BeforeEach(func() {
+		})
+
+		AfterEach(func() {
+
+		})
+
+		Context("when an error is received in the error chan", func() {
+			It("it drains existing connections", func() {
+
+				app := test.NewTestApp([]route.Uri{"drain.vcap.me"}, config.Port, mbusClient, nil, "")
+				blocker := make(chan bool)
+				resultCh := make(chan bool, 2)
+				app.AddHandler("/", func(w http.ResponseWriter, r *http.Request) {
+					blocker <- true
+
+					_, err := ioutil.ReadAll(r.Body)
+					defer r.Body.Close()
+					Expect(err).ToNot(HaveOccurred())
+
+					<-blocker
+
+					w.WriteHeader(http.StatusNoContent)
+				})
+
+				app.Listen()
+
+				Eventually(func() bool {
+					return appRegistered(registry, app)
+				}).Should(BeTrue())
+
+				drainTimeout := 1 * time.Second
+
+				go func() {
+					defer GinkgoRecover()
+					req, err := http.NewRequest("GET", app.Endpoint(), nil)
+					Expect(err).ToNot(HaveOccurred())
+
+					client := http.Client{}
+					resp, err := client.Do(req)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(resp).ToNot(BeNil())
+					defer resp.Body.Close()
+					_, err = ioutil.ReadAll(resp.Body)
+					Expect(err).ToNot(HaveOccurred())
+					resultCh <- false
+				}()
+				<-blocker
+				go func() {
+					errChan <- errors.New("Fake error")
+				}()
+
+				Consistently(resultCh, drainTimeout/10).ShouldNot(Receive())
+
+				blocker <- false
+
+				var result bool
+				Eventually(resultCh).Should(Receive(&result))
+				Expect(result).To(BeFalse())
+			})
 		})
 	})
 })

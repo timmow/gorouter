@@ -80,8 +80,6 @@ var _ = Describe("Router Integration", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Eventually(session, 5).Should(Say("gorouter.started"))
 		gorouterSession = session
-		// TODO find out why it is neede and remove it
-		time.Sleep(2 * time.Second)
 		return session
 	}
 
@@ -215,6 +213,7 @@ var _ = Describe("Router Integration", func() {
 			Eventually(func() bool { return appRegistered(routesUri, timeoutApp) }).Should(BeTrue())
 
 			go func() {
+				defer GinkgoRecover()
 				_, err := http.Get(timeoutApp.Endpoint())
 				resultCh <- err
 			}()

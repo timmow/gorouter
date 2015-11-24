@@ -18,12 +18,11 @@ import (
 	"github.com/cloudfoundry/yagnats"
 	. "github.com/onsi/ginkgo"
 	gConfig "github.com/onsi/ginkgo/config"
-	"github.com/tedsuo/ifrit/ginkgomon"
 	. "github.com/onsi/gomega"
 	"github.com/tedsuo/ifrit"
+	"github.com/tedsuo/ifrit/ginkgomon"
 
 	"bufio"
-	// "os"
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
@@ -34,6 +33,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -81,21 +81,12 @@ var _ = Describe("Router", func() {
 			Reporter:        varz,
 			AccessLogger:    &access_log.NullAccessLogger{},
 		})
-		r, err := NewRouter(config, proxy, mbusClient, registry, varz, logcounter)
+		r, err := NewRouter(config, proxy, mbusClient, registry, varz, logcounter, nil)
 
 		Expect(err).ToNot(HaveOccurred())
 		router = r
-		// signals := make(chan os.Signal)
-		// readyChan := make(chan struct{})
 
-		// r.Run(signals, readyChan)
 		routerProcess = ginkgomon.Invoke(r)
-		// time.Sleep(50 * time.Millisecond)
-		// go func() {
-		// 	select {
-		// 	case <-errChan:
-		// 	}
-		// }()
 	})
 
 	AfterEach(func() {
@@ -104,8 +95,7 @@ var _ = Describe("Router", func() {
 		}
 
 		if router != nil {
-			ginkgomon.Interrupt(routerProcess, 5 * time.Second)
-			// router.Stop()
+			routerProcess.Signal(syscall.SIGUSR1)
 		}
 	})
 
@@ -357,8 +347,7 @@ var _ = Describe("Router", func() {
 
 			sendAndReceive(req, http.StatusNoContent)
 
-			// router.Stop()
-			ginkgomon.Interrupt(routerProcess, 5 * time.Second)
+			routerProcess.Signal(syscall.SIGUSR1)
 			router = nil
 
 			req, err = http.NewRequest("GET", app.Endpoint(), nil)
@@ -377,13 +366,16 @@ var _ = Describe("Router", func() {
 
 			sendAndReceive(req, http.StatusOK)
 
-			router.Stop()
+			routerProcess.Signal(syscall.SIGUSR1)
 			router = nil
 
-			req, err = http.NewRequest("GET", host, nil)
+			Eventually(func() error {
+				req, err = http.NewRequest("GET", host, nil)
+				Expect(err).ToNot(HaveOccurred())
 
-			_, err = http.DefaultClient.Do(req)
-			Expect(err).To(HaveOccurred())
+				_, err = http.DefaultClient.Do(req)
+				return err
+			}).Should(HaveOccurred())
 		})
 
 		It("no longer proxies https", func() {
@@ -416,7 +408,8 @@ var _ = Describe("Router", func() {
 			resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
 
-			router.Stop()
+			// router.Stop()
+			routerProcess.Signal(syscall.SIGUSR1)
 			router = nil
 
 			req, err = http.NewRequest("GET", host, nil)

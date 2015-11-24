@@ -96,7 +96,7 @@ func main() {
 
 	proxy := buildProxy(c, registry, accessLogger, compositeReporter, crypto, cryptoPrev)
 
-	router, err := router.NewRouter(c, proxy, natsClient, registry, varz, logCounter)
+	router, err := router.NewRouter(c, proxy, natsClient, registry, varz, logCounter, nil)
 	if err != nil {
 		logger.Errorf("An error occurred: %s", err.Error())
 		os.Exit(1)
@@ -108,8 +108,6 @@ func main() {
 func launchRouter(c *config.Config, router *router.Router, logger *steno.Logger) {
 
 	errChan := router.Run2()
-
-	logger.Info("gorouter.started")
 
 	waitOnErrOrSignal(c, logger, errChan, router)
 
@@ -126,15 +124,11 @@ func launchRouter2(c *config.Config, router *router.Router, logger *steno.Logger
 
 	monitor := ifrit.Invoke(sigmon.New(group, syscall.SIGTERM, syscall.SIGINT, syscall.SIGUSR1))
 
-	logger.Info("gorouter.started")
-
 	err := <-monitor.Wait()
 	if err != nil {
 		logger.Error("gorouter.exited-with-failure")
 		os.Exit(1)
 	}
-
-	logger.Info("gorouter.exited")
 
 	os.Exit(0)
 }

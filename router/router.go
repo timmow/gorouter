@@ -199,17 +199,8 @@ func (r *Router) DrainAndStop() {
 	)
 
 	r.Drain(drainTimeout)
-	stoppingAt := time.Now()
-
-	r.logger.Info("gorouter.stopping")
 
 	r.Stop()
-	r.logger.Infod(
-		map[string]interface{}{
-			"took": time.Since(stoppingAt).String(),
-		},
-		"gorouter.stopped",
-	)
 }
 
 //  WIP: Keeping the old version around for reference
@@ -335,6 +326,11 @@ func (r *Router) Drain(drainTimeout time.Duration) error {
 }
 
 func (r *Router) Stop() {
+
+	stoppingAt := time.Now()
+
+	r.logger.Info("gorouter.stopping")
+
 	r.stopListening()
 
 	r.connLock.Lock()
@@ -342,6 +338,12 @@ func (r *Router) Stop() {
 	r.connLock.Unlock()
 
 	r.component.Stop()
+	r.logger.Infod(
+		map[string]interface{}{
+			"took": time.Since(stoppingAt).String(),
+		},
+		"gorouter.stopped",
+	)
 }
 
 // connLock must be locked

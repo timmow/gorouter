@@ -4,16 +4,15 @@ import (
 	"bufio"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"fmt"
-	"syscall"
-
 	"github.com/cloudfoundry/dropsonde/emitter"
-	"github.com/cloudfoundry/dropsonde/metrics"
 	"github.com/cloudfoundry/gosteno"
 	"github.com/cloudfoundry/sonde-go/events"
 	"github.com/gogo/protobuf/proto"
+	"syscall"
 )
 
 // A LogSender emits log events.
@@ -26,16 +25,28 @@ type LogSender interface {
 }
 
 type logSender struct {
-	eventEmitter emitter.EventEmitter
-	logger       *gosteno.Logger
+	eventEmitter         emitter.EventEmitter
+	logger               *gosteno.Logger
+	logMessageTotalCount float64
+	sync.RWMutex
 }
 
 // NewLogSender instantiates a logSender with the given EventEmitter.
-func NewLogSender(eventEmitter emitter.EventEmitter, logger *gosteno.Logger) LogSender {
+func NewLogSender(eventEmitter emitter.EventEmitter, counterEmissionInterval time.Duration, logger *gosteno.Logger) LogSender {
 	l := logSender{
 		eventEmitter: eventEmitter,
 		logger:       logger,
 	}
+
+	go func() {
+		ticker := time.NewTicker(counterEmissionInterval)
+		defer ticker.Stop()
+		for {
+			<-ticker.C
+			l.emitCounters()
+		}
+	}()
+
 	return &l
 }
 
@@ -43,7 +54,10 @@ func NewLogSender(eventEmitter emitter.EventEmitter, logger *gosteno.Logger) Log
 // with a message type of std out.
 // Returns an error if one occurs while sending the event.
 func (l *logSender) SendAppLog(appID, message, sourceType, sourceInstance string) error {
-	metrics.BatchIncrementCounter("logSenderTotalMessagesRead")
+	l.Lock()
+	l.logMessageTotalCount++
+	l.Unlock()
+
 	return l.eventEmitter.Emit(makeLogMessage(appID, message, sourceType, sourceInstance, events.LogMessage_OUT))
 }
 
@@ -51,7 +65,10 @@ func (l *logSender) SendAppLog(appID, message, sourceType, sourceInstance string
 // with a message type of std err.
 // Returns an error if one occurs while sending the event.
 func (l *logSender) SendAppErrorLog(appID, message, sourceType, sourceInstance string) error {
-	metrics.BatchIncrementCounter("logSenderTotalMessagesRead")
+	l.Lock()
+	l.logMessageTotalCount++
+	l.Unlock()
+
 	return l.eventEmitter.Emit(makeLogMessage(appID, message, sourceType, sourceInstance, events.LogMessage_ERR))
 }
 
@@ -98,6 +115,17 @@ func (l *logSender) isMessageTooLong(err error, appID string, sourceType string,
 	}
 
 	return false
+}
+
+func (l *logSender) emitCounters() {
+	l.Lock()
+	defer l.Unlock()
+
+	l.eventEmitter.Emit(&events.ValueMetric{
+		Name:  proto.String("logSenderTotalMessagesRead"),
+		Value: proto.Float64(l.logMessageTotalCount),
+		Unit:  proto.String("count"),
+	})
 }
 
 func makeLogMessage(appID, message, sourceType, sourceInstance string, messageType events.LogMessage_MessageType) *events.LogMessage {

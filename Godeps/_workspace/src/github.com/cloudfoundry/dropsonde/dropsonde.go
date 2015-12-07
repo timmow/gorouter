@@ -18,8 +18,6 @@ import (
 	"time"
 
 	"github.com/cloudfoundry/dropsonde/emitter"
-	"github.com/cloudfoundry/dropsonde/envelope_sender"
-	"github.com/cloudfoundry/dropsonde/envelopes"
 	"github.com/cloudfoundry/dropsonde/instrumented_handler"
 	"github.com/cloudfoundry/dropsonde/instrumented_round_tripper"
 	"github.com/cloudfoundry/dropsonde/log_sender"
@@ -91,12 +89,10 @@ func InstrumentedRoundTripper(roundTripper http.RoundTripper) http.RoundTripper 
 }
 
 func initialize() {
-	emitter := AutowiredEmitter()
-	sender := metric_sender.NewMetricSender(emitter)
+	sender := metric_sender.NewMetricSender(AutowiredEmitter())
 	batcher := metricbatcher.New(sender, defaultBatchInterval)
 	metrics.Initialize(sender, batcher)
-	logs.Initialize(log_sender.NewLogSender(AutowiredEmitter(), gosteno.NewLogger("dropsonde/logs")))
-	envelopes.Initialize(envelope_sender.NewEnvelopeSender(emitter))
+	logs.Initialize(log_sender.NewLogSender(AutowiredEmitter(), statsInterval, gosteno.NewLogger("dropsonde/logs")))
 	go runtime_stats.NewRuntimeStats(autowiredEmitter, statsInterval).Run(nil)
 	http.DefaultTransport = InstrumentedRoundTripper(http.DefaultTransport)
 }
@@ -125,12 +121,6 @@ type NullEventEmitter struct{}
 // Emit is called to send an event to a remote host. On NullEventEmitter,
 // it is a no-op.
 func (*NullEventEmitter) Emit(events.Event) error {
-	return nil
-}
-
-// EmitEnvelope is called to send an envelope to a remote host. On NullEventEmitter,
-// it is a no-op.
-func (*NullEventEmitter) EmitEnvelope(*events.Envelope) error {
 	return nil
 }
 

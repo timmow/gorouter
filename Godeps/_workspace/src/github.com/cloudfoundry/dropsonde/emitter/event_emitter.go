@@ -9,7 +9,6 @@ import (
 
 type EventEmitter interface {
 	Emit(events.Event) error
-	EmitEnvelope(*events.Envelope) error
 	Close()
 }
 
@@ -28,10 +27,6 @@ func (e *eventEmitter) Emit(event events.Event) error {
 		return fmt.Errorf("Wrap: %v", err)
 	}
 
-	return e.EmitEnvelope(envelope)
-}
-
-func (e *eventEmitter) EmitEnvelope(envelope *events.Envelope) error {
 	data, err := proto.Marshal(envelope)
 	if err != nil {
 		return fmt.Errorf("Marshal: %v", err)

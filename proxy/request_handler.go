@@ -81,7 +81,7 @@ func (h *RequestHandler) HandleMissingRoute() {
 
 	h.response.Header().Set("X-Cf-RouterError", "unknown_route")
 	var message string
-	if onlyAllowedHostCharacters(h.request.Host) {
+	if ValidHost(h.request.Host) {
 		message = fmt.Sprintf("Requested route ('%s') does not exist.", h.request.Host)
 	} else {
 		message = fmt.Sprintf("Requested route does not exist.")

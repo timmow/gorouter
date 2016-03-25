@@ -186,7 +186,7 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 
 		afterNext: func(endpoint *route.Endpoint) {
 			if endpoint != nil {
-				handler.AddLoggingData(lager.Data{"route-endpoint": endpoint.ToLogData()})
+				handler.Logger().Info("", lager.Data{"RouteEndpoint": endpoint.ToLogData()})
 				accessLog.RouteEndpoint = endpoint
 				p.reporter.CaptureRoutingRequest(endpoint, request)
 			}

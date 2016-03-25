@@ -67,7 +67,8 @@ func main() {
 	InitLoggerFromConfig(logger, c, logCounter)
 	err := dropsonde.Initialize(c.Logging.MetronAddress, c.Logging.JobName)
 	if err != nil {
-		logger.Fatal("dropsonde-initialize-error", err)
+		logger.Error("Dropsonde failed to initialize ", err)
+		os.Exit(1)
 	}
 
 	// setup number of procs
@@ -79,18 +80,18 @@ func main() {
 		cf_debug_server.Run(c.DebugAddr)
 	}
 
-	logger.Info("setting-up-nats-connection")
-	natsClient := connectToNatsServer(logger.Session("nats"), c)
+	logger.Info("Setting up NATs connection")
+	natsClient := connectToNatsServer(logger, c)
 
 	metricsReporter := metrics.NewMetricsReporter()
-	registry := rregistry.NewRouteRegistry(logger.Session("registry"), c, natsClient, metricsReporter)
+	registry := rregistry.NewRouteRegistry(logger, c, natsClient, metricsReporter)
 
 	varz := rvarz.NewVarz(registry)
 	compositeReporter := metrics.NewCompositeReporter(varz, metricsReporter)
 
-	accessLogger, err := access_log.CreateRunningAccessLogger(logger.Session("access-log"), c)
+	accessLogger, err := access_log.CreateRunningAccessLogger(logger, c)
 	if err != nil {
-		logger.Fatal("error-creating-access-logger", err)
+		logger.Fatal("Error creating access logger: ", err)
 	}
 
 	var crypto secure.Crypto
@@ -102,24 +103,26 @@ func main() {
 		}
 	}
 
-	proxy := buildProxy(logger.Session("proxy"), c, registry, accessLogger, compositeReporter, crypto, cryptoPrev)
+	proxy := buildProxy(logger, c, registry, accessLogger, compositeReporter, crypto, cryptoPrev)
 
-	router, err := router.NewRouter(logger.Session("router"), c, proxy, natsClient, registry, varz, logCounter, nil)
+	router, err := router.NewRouter(logger, c, proxy, natsClient, registry, varz, logCounter, nil)
 	if err != nil {
-		logger.Fatal("initialize-router-error", err)
+		logger.Error("An error occurred: ", err)
+		os.Exit(1)
 	}
 
 	members := grouper.Members{
 		{"router", router},
 	}
 	if c.RoutingApiEnabled() {
-		logger.Info("setting-up-routing-api")
-		routeFetcher := setupRouteFetcher(logger.Session("route-fetcher"), c, registry)
+		logger.Info("Setting up route fetcher")
+		routeFetcher := setupRouteFetcher(logger, c, registry)
 
 		// check connectivity to routing api
 		err := routeFetcher.FetchRoutes()
 		if err != nil {
-			logger.Fatal("routing-api-connection-failed", err)
+			logger.Error("Failed to connect to the Routing API: %s\n", err)
+			os.Exit(1)
 		}
 		members = append(members, grouper.Member{"router-fetcher", routeFetcher})
 	}
@@ -130,7 +133,7 @@ func main() {
 
 	err = <-monitor.Wait()
 	if err != nil {
-		logger.Error("gorouter.exited-with-failure", err)
+		logger.Error("gorouter.exited-with-failure: ", err)
 		os.Exit(1)
 	}
 
@@ -142,7 +145,8 @@ func createCrypto(logger lager.Logger, secret string) *secure.AesGCM {
 	secretPbkdf2 := secure.NewPbkdf2([]byte(secret), 16)
 	crypto, err := secure.NewAesGCM(secretPbkdf2)
 	if err != nil {
-		logger.Fatal("error-creating-route-service-crypto", err)
+		logger.Error("Error creating route service crypto: %s\n", err)
+		os.Exit(1)
 	}
 	return crypto
 }
@@ -178,7 +182,8 @@ func setupRouteFetcher(logger lager.Logger, c *config.Config, registry rregistry
 
 	_, err := uaaClient.FetchToken(false)
 	if err != nil {
-		logger.Fatal("unable-to-fetch-token", err)
+		logger.Error("Unable to fetch token: ", err)
+		os.Exit(1)
 	}
 
 	routingApiUri := fmt.Sprintf("%s:%d", c.RoutingApi.Uri, c.RoutingApi.Port)
@@ -212,7 +217,8 @@ func newUaaClient(logger lager.Logger, clock clock.Clock, c *config.Config) uaa_
 
 	uaaClient, err := uaa_client.NewClient(logger, cfg, clock)
 	if err != nil {
-		logger.Fatal("initialize-token-fetcher-error", err)
+		logger.Error("Error creating token fetcher: %s\n", err)
+		os.Exit(1)
 	}
 	return uaaClient
 }
@@ -234,11 +240,13 @@ func connectToNatsServer(logger lager.Logger, c *config.Config) yagnats.NATSConn
 	}
 
 	if err != nil {
-		logger.Fatal("nats-connection-error", err)
+		logger.Error("Error connecting to NATS: %s\n", err)
+		os.Exit(1)
 	}
 
 	natsClient.AddClosedCB(func(conn *nats.Conn) {
-		logger.Fatal("nats-connection-closed", errors.New("unexpected close"), lager.Data{"connection": *conn})
+		logger.Error("Close on NATS client. nats.Conn: ", err, lager.Data{"connection": *conn})
+		os.Exit(1)
 	})
 
 	return natsClient
@@ -248,7 +256,7 @@ func InitLoggerFromConfig(logger lager.Logger, c *config.Config, logCounter *vca
 	if c.Logging.File != "" {
 		file, err := os.OpenFile(c.Logging.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
 		if err != nil {
-			logger.Fatal("error-opening-log-file", err, lager.Data{"file": c.Logging.File})
+			logger.Error("error-opening-file", err, lager.Data{"file": c.Logging.File})
 		}
 		var logLevel lager.LogLevel
 		switch c.Logging.Level {

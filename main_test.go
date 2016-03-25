@@ -308,7 +308,7 @@ var _ = Describe("Router Integration", func() {
 
 			gorouterCmd := exec.Command(gorouterPath, "-c", cfgFile)
 			gorouterSession, _ = Start(gorouterCmd, GinkgoWriter, GinkgoWriter)
-			Eventually(gorouterSession, 5*time.Second).Should(Exit(2))
+			Eventually(gorouterSession, 5).Should(Exit(1))
 		})
 	})
 
@@ -508,8 +508,8 @@ var _ = Describe("Router Integration", func() {
 					gorouterCmd := exec.Command(gorouterPath, "-c", cfgFile)
 					session, err := Start(gorouterCmd, GinkgoWriter, GinkgoWriter)
 					Expect(err).ToNot(HaveOccurred())
-					Eventually(session, 30*time.Second).Should(Say("unable-to-fetch-token"))
-					Eventually(session, 5*time.Second).Should(Exit(2))
+					Eventually(session, 30*time.Second).Should(Say("Unable to fetch token"))
+					Eventually(session, 5*time.Second).Should(Exit(1))
 				})
 			})
 
@@ -525,8 +525,8 @@ var _ = Describe("Router Integration", func() {
 					gorouterCmd := exec.Command(gorouterPath, "-c", cfgFile)
 					session, err := Start(gorouterCmd, GinkgoWriter, GinkgoWriter)
 					Expect(err).ToNot(HaveOccurred())
-					Eventually(session, 30*time.Second).Should(Say("routing-api-connection-failed"))
-					Eventually(session, 5*time.Second).Should(Exit(2))
+					Eventually(session, 30*time.Second).Should(Say("Failed to connect to the Routing API"))
+					Eventually(session, 5*time.Second).Should(Exit(1))
 				})
 			})
 		})
@@ -542,28 +542,6 @@ var _ = Describe("Router Integration", func() {
 				Eventually(session, 30*time.Second).Should(Say("tls-not-enabled"))
 				Eventually(session, 5*time.Second).Should(Exit(2))
 			})
-		})
-	})
-
-	Context("when failing to open configured logging file", func() {
-		var cfgFile string
-
-		BeforeEach(func() {
-			statusPort := test_util.NextAvailPort()
-			proxyPort := test_util.NextAvailPort()
-
-			cfgFile = filepath.Join(tmpdir, "config.yml")
-			config := createConfig(cfgFile, statusPort, proxyPort)
-			config.Logging.File = "nonExistentDir/file"
-			writeConfig(config, cfgFile)
-		})
-
-		It("exits with non-zero code", func() {
-			gorouterCmd := exec.Command(gorouterPath, "-c", cfgFile)
-			session, err := Start(gorouterCmd, GinkgoWriter, GinkgoWriter)
-			Expect(err).ToNot(HaveOccurred())
-			Eventually(session, 30*time.Second).Should(Say("error-opening-log-file"))
-			Eventually(session, 5*time.Second).Should(Exit(2))
 		})
 	})
 })

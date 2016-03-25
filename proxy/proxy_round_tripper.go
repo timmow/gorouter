@@ -73,7 +73,7 @@ func (rt *BackendRoundTripper) selectEndpoint(request *http.Request) (*route.End
 }
 
 func (rt *BackendRoundTripper) setupRequest(request *http.Request, endpoint *route.Endpoint) {
-	rt.handler.Logger().Debug("backend")
+	rt.handler.Logger().Debug("proxy.backend")
 	request.URL.Host = endpoint.CanonicalAddr()
 	request.Header.Set("X-CF-ApplicationID", endpoint.ApplicationId)
 	setRequestXCfInstanceId(request, endpoint)
@@ -81,7 +81,8 @@ func (rt *BackendRoundTripper) setupRequest(request *http.Request, endpoint *rou
 
 func (rt *BackendRoundTripper) reportError(err error) {
 	rt.iter.EndpointFailed()
-	rt.handler.Logger().Error("backend-endpoint-failed", err)
+	rt.handler.Logger().Error("Error", err)
+	rt.handler.Logger().Info("proxy.endpoint.failed")
 }
 
 type RouteServiceRoundTripper struct {
@@ -112,7 +113,8 @@ func (rt *RouteServiceRoundTripper) RoundTrip(request *http.Request) (*http.Resp
 }
 
 func (rs *RouteServiceRoundTripper) reportError(err error) {
-	rs.handler.Logger().Error("route-service-failed", err)
+	rs.handler.Logger().Error("Error", err)
+	rs.handler.Logger().Info("proxy.route-service.failed")
 }
 
 func retryableError(err error) bool {

@@ -10,8 +10,6 @@ import (
 	. "github.com/cloudfoundry/gorouter/access_log"
 	"github.com/cloudfoundry/gorouter/route"
 	"github.com/cloudfoundry/gorouter/test_util"
-	"github.com/pivotal-golang/lager"
-	"github.com/pivotal-golang/lager/lagertest"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -23,20 +21,13 @@ import (
 
 var _ = Describe("AccessLog", func() {
 
-	var (
-		logger lager.Logger
-	)
 	Context("with a dropsonde source instance", func() {
 
-		BeforeEach(func() {
-			logger = lagertest.NewTestLogger("test")
-
-		})
 		It("logs to dropsonde", func() {
 
 			fakeLogSender := fake.NewFakeLogSender()
 			logs.Initialize(fakeLogSender)
-			accessLogger := NewFileAndLoggregatorAccessLogger(logger, "42")
+			accessLogger := NewFileAndLoggregatorAccessLogger("42")
 			go accessLogger.Run()
 
 			accessLogger.Log(*CreateAccessLogRecord())
@@ -56,7 +47,7 @@ var _ = Describe("AccessLog", func() {
 			fakeLogSender := fake.NewFakeLogSender()
 			logs.Initialize(fakeLogSender)
 
-			accessLogger := NewFileAndLoggregatorAccessLogger(logger, "43")
+			accessLogger := NewFileAndLoggregatorAccessLogger("43")
 
 			routeEndpoint := route.NewEndpoint("", "127.0.0.1", 4567, "", nil, -1, "")
 
@@ -80,7 +71,7 @@ var _ = Describe("AccessLog", func() {
 			tempStdout, _ := os.Create(fname)
 			defer tempStdout.Close()
 			os.Stdout = tempStdout
-			accessLogger := NewFileAndLoggregatorAccessLogger(logger, "", fakeAccessFile, os.Stdout)
+			accessLogger := NewFileAndLoggregatorAccessLogger("", fakeAccessFile, os.Stdout)
 
 			go accessLogger.Run()
 			accessLogger.Log(*CreateAccessLogRecord())

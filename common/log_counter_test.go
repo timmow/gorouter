@@ -2,47 +2,39 @@ package common_test
 
 import (
 	"encoding/json"
-	"strconv"
-
 	. "github.com/cloudfoundry/gorouter/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/pivotal-golang/lager"
+
+	steno "github.com/cloudfoundry/gosteno"
 )
 
 var _ = Describe("LogCounter", func() {
-	var (
-		infoMessage  []byte
-		errorMessage []byte
-	)
-
-	BeforeEach(func() {
-		infoMessage = []byte("info-message")
-		errorMessage = []byte("error-message")
-	})
+	var info = steno.NewRecord("", steno.LOG_INFO, "", nil)
+	var err = steno.NewRecord("", steno.LOG_ERROR, "", nil)
 
 	It("counts the number of records", func() {
 		counter := NewLogCounter()
-		counter.Log(lager.INFO, infoMessage)
-		Expect(counter.GetCount(strconv.Itoa(int(lager.INFO)))).To(Equal(1))
+		counter.AddRecord(info)
+		Expect(counter.GetCount(steno.LOG_INFO.Name)).To(Equal(1))
 
-		counter.Log(lager.INFO, infoMessage)
-		Expect(counter.GetCount(strconv.Itoa(int(lager.INFO)))).To(Equal(2))
+		counter.AddRecord(info)
+		Expect(counter.GetCount(steno.LOG_INFO.Name)).To(Equal(2))
 	})
 
 	It("counts all log levels", func() {
 		counter := NewLogCounter()
-		counter.Log(lager.INFO, infoMessage)
-		Expect(counter.GetCount(strconv.Itoa(int(lager.INFO)))).To(Equal(1))
+		counter.AddRecord(info)
+		Expect(counter.GetCount(steno.LOG_INFO.Name)).To(Equal(1))
 
-		counter.Log(lager.ERROR, errorMessage)
-		Expect(counter.GetCount(strconv.Itoa(int(lager.ERROR)))).To(Equal(1))
+		counter.AddRecord(err)
+		Expect(counter.GetCount(steno.LOG_ERROR.Name)).To(Equal(1))
 	})
 
 	It("marshals the set of counts", func() {
 		counter := NewLogCounter()
-		counter.Log(lager.INFO, infoMessage)
-		counter.Log(lager.ERROR, errorMessage)
+		counter.AddRecord(info)
+		counter.AddRecord(err)
 
 		b, e := counter.MarshalJSON()
 		Expect(e).ToNot(HaveOccurred())
@@ -51,7 +43,7 @@ var _ = Describe("LogCounter", func() {
 		e = json.Unmarshal(b, &v)
 		Expect(e).ToNot(HaveOccurred())
 		Expect(v).To(HaveLen(2))
-		Expect(v[strconv.Itoa(int(lager.INFO))]).To(Equal(1))
-		Expect(v[strconv.Itoa(int(lager.ERROR))]).To(Equal(1))
+		Expect(v[steno.LOG_INFO.Name]).To(Equal(1))
+		Expect(v[steno.LOG_ERROR.Name]).To(Equal(1))
 	})
 })

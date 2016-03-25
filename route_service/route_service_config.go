@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cloudfoundry/gorouter/common/secure"
-	"github.com/pivotal-golang/lager"
+	steno "github.com/cloudfoundry/gosteno"
 )
 
 const (
@@ -24,7 +24,7 @@ type RouteServiceConfig struct {
 	routeServiceTimeout time.Duration
 	crypto              secure.Crypto
 	cryptoPrev          secure.Crypto
-	logger              lager.Logger
+	logger              *steno.Logger
 	recommendHttps      bool
 }
 
@@ -37,13 +37,13 @@ type RouteServiceArgs struct {
 	RecommendHttps  bool
 }
 
-func NewRouteServiceConfig(logger lager.Logger, enabled bool, timeout time.Duration, crypto secure.Crypto, cryptoPrev secure.Crypto, recommendHttps bool) *RouteServiceConfig {
+func NewRouteServiceConfig(enabled bool, timeout time.Duration, crypto secure.Crypto, cryptoPrev secure.Crypto, recommendHttps bool) *RouteServiceConfig {
 	return &RouteServiceConfig{
 		routeServiceEnabled: enabled,
 		routeServiceTimeout: timeout,
 		crypto:              crypto,
 		cryptoPrev:          cryptoPrev,
-		logger:              logger,
+		logger:              steno.NewLogger("router.proxy.route-service"),
 		recommendHttps:      recommendHttps,
 	}
 }
@@ -81,14 +81,14 @@ func (rs *RouteServiceConfig) ValidateSignature(headers *http.Header, requestUrl
 
 	signature, err := SignatureFromHeaders(signatureHeader, metadataHeader, rs.crypto)
 	if err != nil {
-		rs.logger.Info("proxy.route-service.current_key", lager.Data{"error": err.Error()})
+		rs.logger.Warnd(map[string]interface{}{"error": err.Error()}, "proxy.route-service.current_key")
 		// Decrypt the head again trying to use the old key.
 		if rs.cryptoPrev != nil {
-			rs.logger.Info("proxy.route-service.current_key", lager.Data{"error": err.Error()})
+			rs.logger.Warnd(map[string]interface{}{"error": err.Error()}, "proxy.route-service.current_key")
 			signature, err = SignatureFromHeaders(signatureHeader, metadataHeader, rs.cryptoPrev)
 
 			if err != nil {
-				rs.logger.Info("proxy.route-service.previous_key", lager.Data{"error": err.Error()})
+				rs.logger.Warnd(map[string]interface{}{"error": err.Error()}, "proxy.route-service.previous_key")
 			}
 		}
 
@@ -114,7 +114,7 @@ func (rs *RouteServiceConfig) validateSignatureTimeout(signature Signature) erro
 func (rs *RouteServiceConfig) validateForwardedUrl(signature Signature, requestUrl string) error {
 	if requestUrl != signature.ForwardedUrl {
 		var err = RouteServiceForwardedUrlMismatch
-		rs.logger.Info("proxy.route-service.forwarded-url.mismatch", lager.Data{"error": err.Error()})
+		rs.logger.Warnd(map[string]interface{}{"error": err.Error()}, "proxy.route-service.forwarded-url.mismatch")
 		return err
 	}
 	return nil

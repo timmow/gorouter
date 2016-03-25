@@ -41,7 +41,7 @@ func NewProcessStatus() *ProcessStatus {
 func (p *ProcessStatus) Update() {
 	e := syscall.Getrusage(syscall.RUSAGE_SELF, p.rusage)
 	if e != nil {
-		log.Fatal("failed-to-get-rusage", e)
+		log.Fatal(e.Error())
 	}
 
 	p.Lock()

@@ -11,8 +11,8 @@ import (
 
 	"github.com/apcera/nats"
 	. "github.com/cloudfoundry/gorouter/common/http"
+	steno "github.com/cloudfoundry/gosteno"
 	"github.com/cloudfoundry/yagnats"
-	"github.com/pivotal-golang/lager"
 	"github.com/pivotal-golang/localip"
 )
 
@@ -23,7 +23,7 @@ type VcapComponent struct {
 	Varz       *Varz                     `json:"-"`
 	Healthz    *Healthz                  `json:"-"`
 	InfoRoutes map[string]json.Marshaler `json:"-"`
-	Logger     lager.Logger              `json:"-"`
+	Logger     *steno.Logger             `json:"-"`
 
 	listener net.Listener
 	statusCh chan error
@@ -50,9 +50,8 @@ func (c *VcapComponent) UpdateVarz() {
 
 func (c *VcapComponent) Start() error {
 	if c.Varz.Type == "" {
-		err := errors.New("type is required")
-		log.Error("Component type is required", err)
-		return err
+		log.Error("Component type is required")
+		return errors.New("type is required")
 	}
 
 	c.quitCh = make(chan struct{}, 1)
@@ -66,13 +65,13 @@ func (c *VcapComponent) Start() error {
 	if c.Varz.Host == "" {
 		host, err := localip.LocalIP()
 		if err != nil {
-			log.Error("error-getting-localIP", err)
+			log.Error(err.Error())
 			return err
 		}
 
 		port, err := localip.LocalPort()
 		if err != nil {
-			log.Error("error-getting-localPort", err)
+			log.Error(err.Error())
 			return err
 		}
 
@@ -107,14 +106,14 @@ func (c *VcapComponent) Start() error {
 func (c *VcapComponent) Register(mbusClient yagnats.NATSConn) error {
 	mbusClient.Subscribe("vcap.component.discover", func(msg *nats.Msg) {
 		if msg.Reply == "" {
-			log.Info(fmt.Sprintf("Received message with empty reply on subject %s", msg.Subject))
+			log.Warnf("Received message with empty reply on subject %s", msg.Subject)
 			return
 		}
 
 		c.Varz.Uptime = c.Varz.StartTime.Elapsed()
 		b, e := json.Marshal(c.Varz)
 		if e != nil {
-			log.Error("error-json-marshaling", e)
+			log.Warnf(e.Error())
 			return
 		}
 
@@ -123,13 +122,13 @@ func (c *VcapComponent) Register(mbusClient yagnats.NATSConn) error {
 
 	b, e := json.Marshal(c.Varz)
 	if e != nil {
-		log.Error("error-json-marshaling", e)
+		log.Error(e.Error())
 		return e
 	}
 
 	mbusClient.Publish("vcap.component.announce", b)
 
-	log.Info(fmt.Sprintf("Component %s registered successfully", c.Varz.Type))
+	log.Infof("Component %s registered successfully", c.Varz.Type)
 	return nil
 }
 

@@ -36,8 +36,8 @@ var _ = Describe("Proxy Unit tests", func() {
 			fakeAccessLogger = &fakelogger.FakeAccessLogger{}
 
 			mbus := fakeyagnats.Connect()
+			r = registry.NewRouteRegistry(conf, mbus, new(fakes.FakeRouteRegistryReporter))
 			logger := lagertest.NewTestLogger("test")
-			r = registry.NewRouteRegistry(logger, conf, mbus, new(fakes.FakeRouteRegistryReporter))
 
 			proxyObj = proxy.NewProxy(proxy.ProxyArgs{
 				EndpointTimeout:     conf.EndpointTimeout,
@@ -45,7 +45,6 @@ var _ = Describe("Proxy Unit tests", func() {
 				TraceKey:            conf.TraceKey,
 				Registry:            r,
 				Reporter:            nullVarz{},
-				Logger:              logger,
 				AccessLogger:        fakeAccessLogger,
 				SecureCookies:       conf.SecureCookies,
 				TLSConfig:           tlsConfig,
@@ -53,6 +52,7 @@ var _ = Describe("Proxy Unit tests", func() {
 				RouteServiceTimeout: conf.RouteServiceTimeout,
 				Crypto:              crypto,
 				CryptoPrev:          cryptoPrev,
+				Logger:              logger,
 			})
 
 			r.Register(route.Uri("some-app"), &route.Endpoint{})

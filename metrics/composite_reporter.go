@@ -1,10 +1,8 @@
 package metrics
-
 import (
-	"net/http"
-	"time"
-
-	"github.com/cloudfoundry/gorouter/route"
+"net/http"
+"time"
+"github.com/cloudfoundry/gorouter/route"
 )
 
 type CompositeReporter struct {
@@ -14,8 +12,8 @@ type CompositeReporter struct {
 
 func NewCompositeReporter(first, second ProxyReporter) ProxyReporter {
 	return &CompositeReporter{
-		first:  first,
-		second: second,
+		first: first,
+		second:second,
 	}
 }
 
@@ -23,6 +21,7 @@ func (c *CompositeReporter) CaptureBadRequest(req *http.Request) {
 	c.first.CaptureBadRequest(req)
 	c.second.CaptureBadRequest(req)
 }
+
 
 func (c *CompositeReporter) CaptureBadGateway(req *http.Request) {
 	c.first.CaptureBadGateway(req)

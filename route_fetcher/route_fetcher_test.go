@@ -54,7 +54,7 @@ var _ = Describe("RouteFetcher", func() {
 	)
 
 	BeforeEach(func() {
-		logger = lagertest.NewTestLogger("test")
+		logger = lagertest.NewTestLogger("route_fetcher_test")
 		cfg = config.DefaultConfig()
 		cfg.PruneStaleDropletsInterval = 2 * time.Second
 
@@ -273,6 +273,12 @@ var _ = Describe("RouteFetcher", func() {
 				currentTokenFetchErrors := sender.GetCounter(TokenFetchErrors)
 
 				Eventually(logger).Should(gbytes.Say("Unauthorized"))
+				// Eventually(func() int {
+				// 	return len(sink.Records())
+				// }).Should(BeNumerically(">=", 1))
+
+				// Expect(sink.Records()).ToNot(BeNil())
+				// Expect(sink.Records()[0].Message).To(Equal("Unauthorized"))
 
 				Eventually(uaaClient.FetchTokenCallCount).Should(BeNumerically(">=", 2))
 				Expect(client.SubscribeToEventsWithMaxRetriesCallCount()).Should(Equal(0))

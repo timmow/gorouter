@@ -76,7 +76,7 @@ type proxy struct {
 }
 
 func NewProxy(args ProxyArgs) Proxy {
-	routeServiceConfig := route_service.NewRouteServiceConfig(args.Logger, args.RouteServiceEnabled, args.RouteServiceTimeout, args.Crypto, args.CryptoPrev, args.RouteServiceRecommendHttps)
+	routeServiceConfig := route_service.NewRouteServiceConfig(args.RouteServiceEnabled, args.RouteServiceTimeout, args.Crypto, args.CryptoPrev, args.RouteServiceRecommendHttps)
 
 	p := &proxy{
 		accessLogger: args.AccessLogger,
@@ -156,7 +156,7 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 	request.Body = requestBodyCounter
 
 	proxyWriter := NewProxyResponseWriter(responseWriter)
-	handler := NewRequestHandler(request, proxyWriter, p.reporter, &accessLog, p.logger)
+	handler := NewRequestHandler(p.logger, request, proxyWriter, p.reporter, &accessLog)
 
 	defer func() {
 		accessLog.RequestBytesReceived = requestBodyCounter.GetCount()

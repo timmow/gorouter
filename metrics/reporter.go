@@ -1,10 +1,8 @@
 package metrics
-
 import (
-	"net/http"
-	"time"
-
-	"github.com/cloudfoundry/gorouter/route"
+"net/http"
+"github.com/cloudfoundry/gorouter/route"
+"time"
 )
 
 //go:generate counterfeiter -o fakes/fake_reporter.go . ProxyReporter

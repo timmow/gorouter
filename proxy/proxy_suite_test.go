@@ -33,9 +33,9 @@ var (
 	accessLog      access_log.AccessLogger
 	accessLogFile  *test_util.FakeFile
 	crypto         secure.Crypto
-	logger         lager.Logger
 	cryptoPrev     secure.Crypto
 	recommendHttps bool
+	logger         lager.Logger
 )
 
 func TestProxy(t *testing.T) {
@@ -60,13 +60,13 @@ var _ = BeforeEach(func() {
 var _ = JustBeforeEach(func() {
 	var err error
 	mbus := fakeyagnats.Connect()
-	r = registry.NewRouteRegistry(logger, conf, mbus, new(fakes.FakeRouteRegistryReporter))
+	r = registry.NewRouteRegistry(conf, mbus, new(fakes.FakeRouteRegistryReporter))
 
 	fakeEmitter := fake.NewFakeEventEmitter("fake")
 	dropsonde.InitializeWithEmitter(fakeEmitter)
 
 	accessLogFile = new(test_util.FakeFile)
-	accessLog = access_log.NewFileAndLoggregatorAccessLogger(logger, "", accessLogFile)
+	accessLog = access_log.NewFileAndLoggregatorAccessLogger("", accessLogFile)
 	go accessLog.Run()
 
 	conf.EnableSSL = true
@@ -81,7 +81,6 @@ var _ = JustBeforeEach(func() {
 		EndpointTimeout:            conf.EndpointTimeout,
 		Ip:                         conf.Ip,
 		TraceKey:                   conf.TraceKey,
-		Logger:                     logger,
 		Registry:                   r,
 		Reporter:                   nullVarz{},
 		AccessLogger:               accessLog,
@@ -92,6 +91,7 @@ var _ = JustBeforeEach(func() {
 		Crypto:                     crypto,
 		CryptoPrev:                 cryptoPrev,
 		RouteServiceRecommendHttps: recommendHttps,
+		Logger: logger,
 	})
 
 	proxyServer, err = net.Listen("tcp", "127.0.0.1:0")

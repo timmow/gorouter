@@ -26,17 +26,18 @@ var _ = Describe("ProxyRoundTripper", func() {
 			endpointIterator  *routefakes.FakeEndpointIterator
 			transport         *proxyfakes.FakeRoundTripper
 			handler           proxy.RequestHandler
-			logger            lager.Logger
 			req               *http.Request
 			resp              *proxyfakes.FakeProxyResponseWriter
 			dialError         = &net.OpError{
 				Err: errors.New("error"),
 				Op:  "dial",
 			}
-			after proxy.AfterRoundTrip
+			after  proxy.AfterRoundTrip
+			logger lager.Logger
 		)
 
 		BeforeEach(func() {
+			logger = lagertest.NewTestLogger("test")
 			endpointIterator = &routefakes.FakeEndpointIterator{}
 			req = test_util.NewRequest("GET", "myapp.com", "/", nil)
 			req.URL.Scheme = "http"
@@ -44,8 +45,7 @@ var _ = Describe("ProxyRoundTripper", func() {
 			nullVarz := nullVarz{}
 			nullAccessRecord := &access_log.AccessLogRecord{}
 
-			logger = lagertest.NewTestLogger("test")
-			handler = proxy.NewRequestHandler(req, resp, nullVarz, nullAccessRecord, logger)
+			handler = proxy.NewRequestHandler(logger, req, resp, nullVarz, nullAccessRecord)
 			transport = &proxyfakes.FakeRoundTripper{}
 
 			after = func(rsp *http.Response, endpoint *route.Endpoint, err error) {

@@ -1,21 +1,21 @@
 package access_log
 
 import (
-	"fmt"
-	"strconv"
-
 	"github.com/cloudfoundry/gorouter/config"
-	"github.com/pivotal-golang/lager"
+	steno "github.com/cloudfoundry/gosteno"
+	"strconv"
 
 	"os"
 	"io"
 )
 
-func CreateRunningAccessLogger(logger lager.Logger, config *config.Config) (AccessLogger, error) {
+func CreateRunningAccessLogger(config *config.Config) (AccessLogger, error) {
 
 	if config.AccessLog == "" && !config.Logging.LoggregatorEnabled {
 		return &NullAccessLogger{}, nil
 	}
+
+	logger := steno.NewLogger("access_log")
 
 	var err error
 	var file *os.File
@@ -23,7 +23,7 @@ func CreateRunningAccessLogger(logger lager.Logger, config *config.Config) (Acce
 	if config.AccessLog != "" {
 		file, err = os.OpenFile(config.AccessLog, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
 		if err != nil {
-			logger.Error(fmt.Sprintf("Error creating accesslog file, %s", config.AccessLog), err)
+			logger.Errorf("Error creating accesslog file, %s: (%s)", config.AccessLog, err.Error())
 			return nil, err
 		}
 		writers = append(writers, file)
@@ -35,7 +35,7 @@ func CreateRunningAccessLogger(logger lager.Logger, config *config.Config) (Acce
 		dropsondeSourceInstance = strconv.FormatUint(uint64(config.Index), 10)
 	}
 
-	accessLogger := NewFileAndLoggregatorAccessLogger(logger, dropsondeSourceInstance, writers...)
+	accessLogger := NewFileAndLoggregatorAccessLogger(dropsondeSourceInstance, writers...)
 	go accessLogger.Run()
 	return accessLogger, nil
 }

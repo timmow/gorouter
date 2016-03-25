@@ -10,8 +10,6 @@ import (
 	"github.com/cloudfoundry/gorouter/test_util"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/pivotal-golang/lager"
-	"github.com/pivotal-golang/lager/lagertest"
 )
 
 var _ = Describe("Route Service Config", func() {
@@ -20,7 +18,6 @@ var _ = Describe("Route Service Config", func() {
 		crypto         secure.Crypto
 		cryptoPrev     secure.Crypto
 		cryptoKey      = "ABCDEFGHIJKLMNOP"
-		logger         lager.Logger
 		recommendHttps bool
 	)
 
@@ -28,8 +25,7 @@ var _ = Describe("Route Service Config", func() {
 		var err error
 		crypto, err = secure.NewAesGCM([]byte(cryptoKey))
 		Expect(err).ToNot(HaveOccurred())
-		logger = lagertest.NewTestLogger("test")
-		config = route_service.NewRouteServiceConfig(logger, true, 1*time.Hour, crypto, cryptoPrev, recommendHttps)
+		config = route_service.NewRouteServiceConfig(true, 1*time.Hour, crypto, cryptoPrev, recommendHttps)
 	})
 
 	AfterEach(func() {
@@ -167,7 +163,7 @@ var _ = Describe("Route Service Config", func() {
 				var err error
 				crypto, err = secure.NewAesGCM([]byte("QRSTUVWXYZ123456"))
 				Expect(err).NotTo(HaveOccurred())
-				config = route_service.NewRouteServiceConfig(logger, true, 1*time.Hour, crypto, cryptoPrev, recommendHttps)
+				config = route_service.NewRouteServiceConfig(true, 1*time.Hour, crypto, cryptoPrev, recommendHttps)
 			})
 
 			Context("when there is no previous key in the configuration", func() {
@@ -183,7 +179,7 @@ var _ = Describe("Route Service Config", func() {
 					var err error
 					cryptoPrev, err = secure.NewAesGCM([]byte(cryptoKey))
 					Expect(err).ToNot(HaveOccurred())
-					config = route_service.NewRouteServiceConfig(logger, true, 1*time.Hour, crypto, cryptoPrev, recommendHttps)
+					config = route_service.NewRouteServiceConfig(true, 1*time.Hour, crypto, cryptoPrev, recommendHttps)
 				})
 
 				It("validates the signature", func() {
@@ -215,7 +211,7 @@ var _ = Describe("Route Service Config", func() {
 					var err error
 					cryptoPrev, err = secure.NewAesGCM([]byte("QRSTUVWXYZ123456"))
 					Expect(err).ToNot(HaveOccurred())
-					config = route_service.NewRouteServiceConfig(logger, true, 1*time.Hour, crypto, cryptoPrev, recommendHttps)
+					config = route_service.NewRouteServiceConfig(true, 1*time.Hour, crypto, cryptoPrev, recommendHttps)
 				})
 
 				It("rejects the signature", func() {

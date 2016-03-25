@@ -6,11 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudfoundry/gorouter/config"
-	"github.com/cloudfoundry/gorouter/metrics"
-	"github.com/cloudfoundry/gorouter/route"
+	steno "github.com/cloudfoundry/gosteno"
 	"github.com/cloudfoundry/yagnats"
-	"github.com/pivotal-golang/lager"
+
+	"github.com/cloudfoundry/gorouter/config"
+	"github.com/cloudfoundry/gorouter/route"
+	"github.com/cloudfoundry/gorouter/metrics"
 )
 
 type RegistryInterface interface {
@@ -27,7 +28,7 @@ type RegistryInterface interface {
 type RouteRegistry struct {
 	sync.RWMutex
 
-	logger lager.Logger
+	logger *steno.Logger
 
 	byUri *Trie
 
@@ -42,9 +43,11 @@ type RouteRegistry struct {
 	timeOfLastUpdate time.Time
 }
 
-func NewRouteRegistry(logger lager.Logger, c *config.Config, mbus yagnats.NATSConn, reporter metrics.RouteRegistryReporter) *RouteRegistry {
+func NewRouteRegistry(c *config.Config, mbus yagnats.NATSConn, reporter metrics.RouteRegistryReporter) *RouteRegistry {
 	r := &RouteRegistry{}
-	r.logger = logger
+
+	r.logger = steno.NewLogger("router.registry")
+
 	r.byUri = NewTrie()
 
 	r.pruneStaleDropletsInterval = c.PruneStaleDropletsInterval
@@ -124,7 +127,7 @@ func (r *RouteRegistry) StartPruningCycle() {
 				case <-r.ticker.C:
 					r.logger.Debug("Start to check and prune stale droplets")
 					r.pruneStaleDroplets()
-					msSinceLastUpdate := uint64(time.Since(r.TimeOfLastUpdate()) / time.Millisecond)
+					msSinceLastUpdate := uint64(time.Since(r.TimeOfLastUpdate())/time.Millisecond)
 					r.reporter.CaptureRouteStats(r.NumUris(), msSinceLastUpdate)
 				}
 			}

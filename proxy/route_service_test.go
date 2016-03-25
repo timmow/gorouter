@@ -485,7 +485,7 @@ var _ = Describe("Route Services", func() {
 
 	It("returns a 200 when we route to a route service that has a valid cert", func() {
 		// sorry google we are using you
-		ln := registerHandlerWithRouteService(r, "my_host.com", "https://www.google.com", func(conn *test_util.HttpConn) {
+		ln := registerHandlerWithRouteService(r, "my_host.com", "https://www.example.com", func(conn *test_util.HttpConn) {
 			Fail("Should not get here")
 		})
 		defer ln.Close()

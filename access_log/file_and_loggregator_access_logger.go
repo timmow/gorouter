@@ -5,7 +5,6 @@ import (
 	"regexp"
 
 	"github.com/cloudfoundry/dropsonde/logs"
-	"github.com/pivotal-golang/lager"
 )
 
 type FileAndLoggregatorAccessLogger struct {
@@ -13,15 +12,13 @@ type FileAndLoggregatorAccessLogger struct {
 	channel                 chan AccessLogRecord
 	stopCh                  chan struct{}
 	writer                  io.Writer
-	logger                  lager.Logger
 }
 
-func NewFileAndLoggregatorAccessLogger(logger lager.Logger, dropsondeSourceInstance string, ws ...io.Writer) *FileAndLoggregatorAccessLogger {
+func NewFileAndLoggregatorAccessLogger(dropsondeSourceInstance string, ws ...io.Writer) *FileAndLoggregatorAccessLogger {
 	a := &FileAndLoggregatorAccessLogger{
 		dropsondeSourceInstance: dropsondeSourceInstance,
 		channel:                 make(chan AccessLogRecord, 128),
 		stopCh:                  make(chan struct{}),
-		logger:                  logger,
 	}
 	configureWriters(a, ws)
 	return a
@@ -32,10 +29,7 @@ func (x *FileAndLoggregatorAccessLogger) Run() {
 		select {
 		case record := <-x.channel:
 			if x.writer != nil {
-				_, err := record.WriteTo(x.writer)
-				if err != nil {
-					x.logger.Error("Error when emiting access log to writers ", err)
-				}
+				record.WriteTo(x.writer)
 			}
 			if x.dropsondeSourceInstance != "" && record.ApplicationId() != "" {
 				logs.SendAppLog(record.ApplicationId(), record.LogMessage(), "RTR", x.dropsondeSourceInstance)

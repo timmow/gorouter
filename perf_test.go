@@ -23,9 +23,9 @@ var _ = Describe("AccessLogRecord", func() {
 		logger := lagertest.NewTestLogger("test")
 		c := config.DefaultConfig()
 		mbus := fakeyagnats.Connect()
-		r := registry.NewRouteRegistry(logger, c, mbus, new(fakes.FakeRouteRegistryReporter))
+		r := registry.NewRouteRegistry(c, mbus, new(fakes.FakeRouteRegistryReporter))
 
-		accesslog, err := access_log.CreateRunningAccessLogger(logger, c)
+		accesslog, err := access_log.CreateRunningAccessLogger(c)
 		Expect(err).ToNot(HaveOccurred())
 
 		proxy.NewProxy(proxy.ProxyArgs{
@@ -35,6 +35,7 @@ var _ = Describe("AccessLogRecord", func() {
 			Registry:        r,
 			Reporter:        varz.NewVarz(r),
 			AccessLogger:    accesslog,
+			Logger:          logger,
 		})
 
 		b.Time("RegisterTime", func() {

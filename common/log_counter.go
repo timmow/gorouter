@@ -2,10 +2,9 @@ package common
 
 import (
 	"encoding/json"
-	"strconv"
 	"sync"
 
-	"github.com/pivotal-golang/lager"
+	steno "github.com/cloudfoundry/gosteno"
 )
 
 type LogCounter struct {
@@ -20,9 +19,9 @@ func NewLogCounter() *LogCounter {
 	return lc
 }
 
-func (lc *LogCounter) Log(logLevel lager.LogLevel, payload []byte) {
+func (lc *LogCounter) AddRecord(record *steno.Record) {
 	lc.Lock()
-	lc.counts[strconv.Itoa(int(logLevel))] += 1
+	lc.counts[record.Level.Name] += 1
 	lc.Unlock()
 }
 
@@ -30,6 +29,13 @@ func (lc *LogCounter) GetCount(key string) int {
 	lc.Lock()
 	defer lc.Unlock()
 	return lc.counts[key]
+}
+
+func (lc *LogCounter) Flush()                     {}
+func (lc *LogCounter) SetCodec(codec steno.Codec) {}
+
+func (lc *LogCounter) GetCodec() steno.Codec {
+	return nil
 }
 
 func (lc *LogCounter) MarshalJSON() ([]byte, error) {

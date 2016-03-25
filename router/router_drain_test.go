@@ -25,13 +25,11 @@ import (
 	"github.com/cloudfoundry/yagnats"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/pivotal-golang/lager"
 	"github.com/pivotal-golang/lager/lagertest"
 )
 
 var _ = Describe("Router", func() {
 	var (
-		logger     lager.Logger
 		natsRunner *natsrunner.NATSRunner
 		config     *cfg.Config
 
@@ -182,7 +180,6 @@ var _ = Describe("Router", func() {
 	}
 
 	BeforeEach(func() {
-		logger = lagertest.NewTestLogger("test")
 		natsPort = test_util.NextAvailPort()
 		natsRunner = natsrunner.NewNATSRunner(int(natsPort))
 		natsRunner.Start()
@@ -203,21 +200,22 @@ var _ = Describe("Router", func() {
 		config.EndpointTimeout = 5 * time.Second
 
 		mbusClient = natsRunner.MessageBus
-		registry = rregistry.NewRouteRegistry(logger, config, mbusClient, new(fakes.FakeRouteRegistryReporter))
+		registry = rregistry.NewRouteRegistry(config, mbusClient, new(fakes.FakeRouteRegistryReporter))
 		varz = vvarz.NewVarz(registry)
 		logcounter := vcap.NewLogCounter()
+		cflogger := lagertest.NewTestLogger("test")
 		proxy := proxy.NewProxy(proxy.ProxyArgs{
-			Logger:          logger,
 			EndpointTimeout: config.EndpointTimeout,
 			Ip:              config.Ip,
 			TraceKey:        config.TraceKey,
 			Registry:        registry,
 			Reporter:        varz,
 			AccessLogger:    &access_log.NullAccessLogger{},
+			Logger:          cflogger,
 		})
 
 		errChan := make(chan error, 2)
-		router, err = NewRouter(logger, config, proxy, mbusClient, registry, varz, logcounter, errChan)
+		router, err = NewRouter(config, proxy, mbusClient, registry, varz, logcounter, errChan)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -446,7 +444,6 @@ var _ = Describe("Router", func() {
 			BeforeEach(func() {
 				logcounter := vcap.NewLogCounter()
 				proxy := proxy.NewProxy(proxy.ProxyArgs{
-					Logger:          logger,
 					EndpointTimeout: config.EndpointTimeout,
 					Ip:              config.Ip,
 					TraceKey:        config.TraceKey,
@@ -457,7 +454,7 @@ var _ = Describe("Router", func() {
 
 				errChan = make(chan error, 2)
 				var err error
-				router, err = NewRouter(logger, config, proxy, mbusClient, registry, varz, logcounter, errChan)
+				router, err = NewRouter(config, proxy, mbusClient, registry, varz, logcounter, errChan)
 				Expect(err).ToNot(HaveOccurred())
 				runRouter(router)
 			})

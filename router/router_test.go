@@ -22,8 +22,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	gConfig "github.com/onsi/ginkgo/config"
 	. "github.com/onsi/gomega"
-	"github.com/pivotal-golang/lager"
-	"github.com/pivotal-golang/lager/lagertest"
 
 	"bufio"
 	"bytes"
@@ -56,7 +54,6 @@ var _ = Describe("Router", func() {
 		signals      chan os.Signal
 		closeChannel chan struct{}
 		readyChan    chan struct{}
-		logger       lager.Logger
 	)
 
 	BeforeEach(func() {
@@ -85,7 +82,6 @@ var _ = Describe("Router", func() {
 		config.PidFile = f.Name()
 
 		mbusClient = natsRunner.MessageBus
-		logger = lagertest.NewTestLogger("router-test")
 		registry = rregistry.NewRouteRegistry(config, mbusClient, new(fakes.FakeRouteRegistryReporter))
 		varz = vvarz.NewVarz(registry)
 		logcounter := vcap.NewLogCounter()
@@ -96,7 +92,6 @@ var _ = Describe("Router", func() {
 			Registry:        registry,
 			Reporter:        varz,
 			AccessLogger:    &access_log.NullAccessLogger{},
-			Logger:          logger,
 		})
 		router, err = NewRouter(config, proxy, mbusClient, registry, varz, logcounter, nil)
 
@@ -553,7 +548,6 @@ var _ = Describe("Router", func() {
 		Eventually(done).Should(Receive(&answer))
 		Expect(answer).ToNot(Equal("A-BOGUS-REQUEST-ID"))
 		Expect(answer).To(MatchRegexp(uuid_regex))
-		// Expect(logger).To(gbytes.Say("vcap-request-id-header-set"))
 
 		resp, _ := httpConn.ReadResponse()
 		Expect(resp.StatusCode).To(Equal(http.StatusOK))

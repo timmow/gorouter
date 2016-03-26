@@ -14,8 +14,6 @@ import (
 	"github.com/cloudfoundry/gorouter/registry"
 	"github.com/cloudfoundry/gorouter/test_util"
 	"github.com/cloudfoundry/yagnats/fakeyagnats"
-	"github.com/pivotal-golang/lager"
-	"github.com/pivotal-golang/lager/lagertest"
 
 	"testing"
 	"time"
@@ -35,7 +33,6 @@ var (
 	crypto         secure.Crypto
 	cryptoPrev     secure.Crypto
 	recommendHttps bool
-	logger         lager.Logger
 )
 
 func TestProxy(t *testing.T) {
@@ -44,7 +41,6 @@ func TestProxy(t *testing.T) {
 }
 
 var _ = BeforeEach(func() {
-	logger = lagertest.NewTestLogger("test")
 	var err error
 
 	crypto, err = secure.NewAesGCM([]byte("ABCDEFGHIJKLMNOP"))
@@ -91,7 +87,6 @@ var _ = JustBeforeEach(func() {
 		Crypto:                     crypto,
 		CryptoPrev:                 cryptoPrev,
 		RouteServiceRecommendHttps: recommendHttps,
-		Logger: logger,
 	})
 
 	proxyServer, err = net.Listen("tcp", "127.0.0.1:0")

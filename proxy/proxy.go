@@ -20,7 +20,6 @@ import (
 	"github.com/cloudfoundry/gorouter/route"
 	"github.com/cloudfoundry/gorouter/route_service"
 	steno "github.com/cloudfoundry/gosteno"
-	"github.com/pivotal-golang/lager"
 )
 
 const (
@@ -58,7 +57,6 @@ type ProxyArgs struct {
 	Crypto                     secure.Crypto
 	CryptoPrev                 secure.Crypto
 	ExtraHeadersToLog          []string
-	Logger                     lager.Logger
 }
 
 type proxy struct {

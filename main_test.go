@@ -539,7 +539,7 @@ var _ = Describe("Router Integration", func() {
 				gorouterCmd := exec.Command(gorouterPath, "-c", cfgFile)
 				session, err := Start(gorouterCmd, GinkgoWriter, GinkgoWriter)
 				Expect(err).ToNot(HaveOccurred())
-				Eventually(session, 30*time.Second).Should(Say("tls-not-enabled"))
+				Eventually(session, 30*time.Second).Should(Say("UAA TLS is not enabled"))
 				Eventually(session, 5*time.Second).Should(Exit(2))
 			})
 		})

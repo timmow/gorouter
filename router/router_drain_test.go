@@ -25,7 +25,6 @@ import (
 	"github.com/cloudfoundry/yagnats"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/pivotal-golang/lager/lagertest"
 )
 
 var _ = Describe("Router", func() {
@@ -203,7 +202,6 @@ var _ = Describe("Router", func() {
 		registry = rregistry.NewRouteRegistry(config, mbusClient, new(fakes.FakeRouteRegistryReporter))
 		varz = vvarz.NewVarz(registry)
 		logcounter := vcap.NewLogCounter()
-		cflogger := lagertest.NewTestLogger("test")
 		proxy := proxy.NewProxy(proxy.ProxyArgs{
 			EndpointTimeout: config.EndpointTimeout,
 			Ip:              config.Ip,
@@ -211,7 +209,6 @@ var _ = Describe("Router", func() {
 			Registry:        registry,
 			Reporter:        varz,
 			AccessLogger:    &access_log.NullAccessLogger{},
-			Logger:          cflogger,
 		})
 
 		errChan := make(chan error, 2)

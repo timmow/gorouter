@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"errors"
 
 	"github.com/apcera/nats"
 	cf_debug_server "github.com/cloudfoundry-incubator/cf-debug-server"
@@ -23,7 +22,6 @@ import (
 	steno "github.com/cloudfoundry/gosteno"
 	"github.com/cloudfoundry/yagnats"
 	"github.com/pivotal-golang/clock"
-	"github.com/pivotal-golang/lager"
 
 	"flag"
 	"fmt"
@@ -53,11 +51,11 @@ func main() {
 	}
 
 	InitLoggerFromConfig(c, logCounter)
-	logger, _ := cf_lager.New("router.main")
+	logger := steno.NewLogger("router.main")
 
 	err := dropsonde.Initialize(c.Logging.MetronAddress, c.Logging.JobName)
 	if err != nil {
-		logger.Error("Dropsonde failed to initialize ", err)
+		logger.Errorf("Dropsonde failed to initialize: %s", err.Error())
 		os.Exit(1)
 	}
 
@@ -81,7 +79,7 @@ func main() {
 
 	accessLogger, err := access_log.CreateRunningAccessLogger(c)
 	if err != nil {
-		logger.Fatal("Error creating access logger: ", err)
+		logger.Fatalf("Error creating access logger: %s\n", err)
 	}
 
 	var crypto secure.Crypto
@@ -93,11 +91,11 @@ func main() {
 		}
 	}
 
-	proxy := buildProxy(logger, c, registry, accessLogger, compositeReporter, crypto, cryptoPrev)
+	proxy := buildProxy(c, registry, accessLogger, compositeReporter, crypto, cryptoPrev)
 
 	router, err := router.NewRouter(c, proxy, natsClient, registry, varz, logCounter, nil)
 	if err != nil {
-		logger.Error("An error occurred: ", err)
+		logger.Errorf("An error occurred: %s", err.Error())
 		os.Exit(1)
 	}
 
@@ -111,7 +109,7 @@ func main() {
 		// check connectivity to routing api
 		err := routeFetcher.FetchRoutes()
 		if err != nil {
-			logger.Error("Failed to connect to the Routing API: %s\n", err)
+			logger.Errorf("Failed to connect to the Routing API: %s\n", err.Error())
 			os.Exit(1)
 		}
 		members = append(members, grouper.Member{"router-fetcher", routeFetcher})
@@ -123,25 +121,25 @@ func main() {
 
 	err = <-monitor.Wait()
 	if err != nil {
-		logger.Error("gorouter.exited-with-failure: ", err)
+		logger.Error("gorouter.exited-with-failure")
 		os.Exit(1)
 	}
 
 	os.Exit(0)
 }
 
-func createCrypto(logger lager.Logger, secret string) *secure.AesGCM {
+func createCrypto(logger *steno.Logger, secret string) *secure.AesGCM {
 	// generate secure encryption key using key derivation function (pbkdf2)
 	secretPbkdf2 := secure.NewPbkdf2([]byte(secret), 16)
 	crypto, err := secure.NewAesGCM(secretPbkdf2)
 	if err != nil {
-		logger.Error("Error creating route service crypto: %s\n", err)
+		logger.Errorf("Error creating route service crypto: %s\n", err)
 		os.Exit(1)
 	}
 	return crypto
 }
 
-func buildProxy(logger lager.Logger, c *config.Config, registry rregistry.RegistryInterface, accessLogger access_log.AccessLogger, reporter metrics.ProxyReporter, crypto secure.Crypto, cryptoPrev secure.Crypto) proxy.Proxy {
+func buildProxy(c *config.Config, registry rregistry.RegistryInterface, accessLogger access_log.AccessLogger, reporter metrics.ProxyReporter, crypto secure.Crypto, cryptoPrev secure.Crypto) proxy.Proxy {
 	args := proxy.ProxyArgs{
 		EndpointTimeout: c.EndpointTimeout,
 		Ip:              c.Ip,
@@ -160,19 +158,18 @@ func buildProxy(logger lager.Logger, c *config.Config, registry rregistry.Regist
 		Crypto:            crypto,
 		CryptoPrev:        cryptoPrev,
 		ExtraHeadersToLog: c.ExtraHeadersToLog,
-		Logger:            logger,
 	}
 	return proxy.NewProxy(args)
 }
 
-func setupRouteFetcher(logger lager.Logger, c *config.Config, registry rregistry.RegistryInterface) *route_fetcher.RouteFetcher {
+func setupRouteFetcher(logger *steno.Logger, c *config.Config, registry rregistry.RegistryInterface) *route_fetcher.RouteFetcher {
 	clock := clock.NewClock()
 
 	uaaClient := newUaaClient(logger, clock, c)
 
 	_, err := uaaClient.FetchToken(false)
 	if err != nil {
-		logger.Error("Unable to fetch token: ", err)
+		logger.Errorf("Unable to fetch token: %s", err.Error())
 		os.Exit(1)
 	}
 
@@ -184,14 +181,14 @@ func setupRouteFetcher(logger lager.Logger, c *config.Config, registry rregistry
 	return routeFetcher
 }
 
-func newUaaClient(logger lager.Logger, clock clock.Clock, c *config.Config) uaa_client.Client {
+func newUaaClient(logger *steno.Logger, clock clock.Clock, c *config.Config) uaa_client.Client {
 	if c.RoutingApi.AuthDisabled {
 		logger.Info("using-noop-token-fetcher")
 		return uaa_client.NewNoOpUaaClient()
 	}
 
 	if c.OAuth.Port == -1 {
-		logger.Fatal("tls-not-enabled", errors.New("GoRouter requires TLS enabled to get OAuth token"), lager.Data{"token-endpoint": c.OAuth.TokenEndpoint, "port": c.OAuth.Port})
+		logger.Fatalf("UAA TLS is not enabled. Token endpoint: %s, Port: %d", c.OAuth.TokenEndpoint, c.OAuth.Port)
 	}
 
 	tokenURL := fmt.Sprintf("https://%s:%d", c.OAuth.TokenEndpoint, c.OAuth.Port)
@@ -206,15 +203,16 @@ func newUaaClient(logger lager.Logger, clock clock.Clock, c *config.Config) uaa_
 		ExpirationBufferInSec: c.TokenFetcherExpirationBufferTimeInSeconds,
 	}
 
-	uaaClient, err := uaa_client.NewClient(logger, cfg, clock)
+	cfLogger, _ := cf_lager.New("token_fetcher")
+	uaaClient, err := uaa_client.NewClient(cfLogger, cfg, clock)
 	if err != nil {
-		logger.Error("Error creating token fetcher: %s\n", err)
+		logger.Errorf("Error creating token fetcher: %s\n", err)
 		os.Exit(1)
 	}
 	return uaaClient
 }
 
-func connectToNatsServer(logger lager.Logger, c *config.Config) yagnats.NATSConn {
+func connectToNatsServer(logger *steno.Logger, c *config.Config) yagnats.NATSConn {
 	var natsClient yagnats.NATSConn
 	var err error
 
@@ -231,12 +229,12 @@ func connectToNatsServer(logger lager.Logger, c *config.Config) yagnats.NATSConn
 	}
 
 	if err != nil {
-		logger.Error("Error connecting to NATS: %s\n", err)
+		logger.Errorf("Error connecting to NATS: %s\n", err)
 		os.Exit(1)
 	}
 
 	natsClient.AddClosedCB(func(conn *nats.Conn) {
-		logger.Error("Close on NATS client. nats.Conn: ", err, lager.Data{"connection": *conn})
+		logger.Errorf("Close on NATS client. nats.Conn: %+v", *conn)
 		os.Exit(1)
 	})
 

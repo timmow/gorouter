@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/pivotal-golang/clock/fakeclock"
-	"github.com/pivotal-golang/lager"
-	"github.com/pivotal-golang/lager/lagertest"
 
 	"github.com/cloudfoundry-incubator/routing-api"
 	"github.com/cloudfoundry-incubator/routing-api/db"
@@ -20,11 +18,11 @@ import (
 	testRegistry "github.com/cloudfoundry/gorouter/registry/fakes"
 	"github.com/cloudfoundry/gorouter/route"
 	. "github.com/cloudfoundry/gorouter/route_fetcher"
+	"github.com/cloudfoundry/gosteno"
 	"github.com/tedsuo/ifrit"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gbytes"
 )
 
 var sender *metrics_fakes.FakeMetricSender
@@ -40,7 +38,8 @@ var _ = Describe("RouteFetcher", func() {
 		uaaClient *testUaaClient.FakeClient
 		registry  *testRegistry.FakeRegistryInterface
 		fetcher   *RouteFetcher
-		logger    lager.Logger
+		logger    *gosteno.Logger
+		sink      *gosteno.TestingSink
 		client    *fake_routing_api.FakeClient
 
 		token *schema.Token
@@ -54,18 +53,27 @@ var _ = Describe("RouteFetcher", func() {
 	)
 
 	BeforeEach(func() {
-		logger = lagertest.NewTestLogger("route_fetcher_test")
 		cfg = config.DefaultConfig()
 		cfg.PruneStaleDropletsInterval = 2 * time.Second
 
 		retryInterval := 0
 		uaaClient = &testUaaClient.FakeClient{}
 		registry = &testRegistry.FakeRegistryInterface{}
+		sink = gosteno.NewTestingSink()
 
 		token = &schema.Token{
 			AccessToken: "access_token",
 			ExpiresIn:   5,
 		}
+
+		loggerConfig := &gosteno.Config{
+			Sinks: []gosteno.Sink{
+				sink,
+			},
+		}
+		gosteno.Init(loggerConfig)
+		logger = gosteno.NewLogger("route_fetcher_test")
+
 		client = &fake_routing_api.FakeClient{}
 
 		eventChannel = make(chan routing_api.Event)
@@ -272,13 +280,12 @@ var _ = Describe("RouteFetcher", func() {
 			It("logs the error", func() {
 				currentTokenFetchErrors := sender.GetCounter(TokenFetchErrors)
 
-				Eventually(logger).Should(gbytes.Say("Unauthorized"))
-				// Eventually(func() int {
-				// 	return len(sink.Records())
-				// }).Should(BeNumerically(">=", 1))
+				Eventually(func() int {
+					return len(sink.Records())
+				}).Should(BeNumerically(">=", 1))
 
-				// Expect(sink.Records()).ToNot(BeNil())
-				// Expect(sink.Records()[0].Message).To(Equal("Unauthorized"))
+				Expect(sink.Records()).ToNot(BeNil())
+				Expect(sink.Records()[0].Message).To(Equal("Unauthorized"))
 
 				Eventually(uaaClient.FetchTokenCallCount).Should(BeNumerically(">=", 2))
 				Expect(client.SubscribeToEventsWithMaxRetriesCallCount()).Should(Equal(0))
@@ -314,8 +321,13 @@ var _ = Describe("RouteFetcher", func() {
 					subscribeCallCount := client.SubscribeToEventsWithMaxRetriesCallCount()
 
 					errorChannel <- errors.New("beep boop im a robot")
-
-					Eventually(logger).Should(gbytes.Say("beep boop im a robot"))
+					Eventually(func() string {
+						if len(sink.Records()) > 1 {
+							return sink.Records()[1].Message
+						} else {
+							return ""
+						}
+					}).Should(Equal("beep boop im a robot"))
 
 					Eventually(uaaClient.FetchTokenCallCount).Should(BeNumerically(">", fetchTokenCallCount))
 					Eventually(client.SubscribeToEventsWithMaxRetriesCallCount).Should(BeNumerically(">", subscribeCallCount))
@@ -341,7 +353,12 @@ var _ = Describe("RouteFetcher", func() {
 
 						currentSubscribeEventsErrors := sender.GetCounter(SubscribeEventsErrors)
 
-						Eventually(logger).Should(gbytes.Say("i failed to subscribe"))
+						Eventually(func() int {
+							return len(sink.Records())
+						}).Should(BeNumerically(">=", 1))
+
+						Expect(sink.Records()).ToNot(BeNil())
+						Expect(sink.Records()[0].Message).To(Equal("i failed to subscribe"))
 
 						Eventually(uaaClient.FetchTokenCallCount).Should(BeNumerically(">", fetchTokenCallCount))
 						Eventually(client.SubscribeToEventsWithMaxRetriesCallCount).Should(BeNumerically(">", subscribeCallCount))
@@ -362,7 +379,12 @@ var _ = Describe("RouteFetcher", func() {
 
 					It("logs the error and tries again by not using cached access token", func() {
 						currentSubscribeEventsErrors := sender.GetCounter(SubscribeEventsErrors)
-						Eventually(logger).Should(gbytes.Say("unauthorized"))
+						Eventually(func() int {
+							return len(sink.Records())
+						}).Should(BeNumerically(">=", 1))
+
+						Expect(sink.Records()).ToNot(BeNil())
+						Expect(sink.Records()[0].Message).To(Equal("unauthorized"))
 						Eventually(uaaClient.FetchTokenCallCount).Should(BeNumerically(">", 2))
 						Expect(uaaClient.FetchTokenArgsForCall(0)).To(BeFalse())
 						Expect(uaaClient.FetchTokenArgsForCall(1)).To(BeTrue())

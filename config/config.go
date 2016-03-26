@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/cloudfoundry-incubator/candiedyaml"
+	steno "github.com/cloudfoundry/gosteno"
+	"github.com/pivotal-golang/localip"
+
 	"io/ioutil"
 	"runtime"
 	"strings"
 	"time"
-
-	"github.com/cloudfoundry-incubator/candiedyaml"
-	"github.com/pivotal-golang/localip"
 )
 
 type StatusConfig struct {
@@ -178,6 +179,8 @@ func (c *Config) Process() {
 	c.Logging.JobName = "gorouter"
 	if c.StartResponseDelayInterval > c.DropletStaleThreshold {
 		c.DropletStaleThreshold = c.StartResponseDelayInterval
+		log := steno.NewLogger("config.logger")
+		log.Warnf("DropletStaleThreshold (%s) cannot be less than StartResponseDelayInterval (%s); setting both equal to StartResponseDelayInterval and continuing", c.DropletStaleThreshold, c.StartResponseDelayInterval)
 	}
 
 	c.DrainTimeout = c.EndpointTimeout

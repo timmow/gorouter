@@ -19,6 +19,7 @@ import (
 	"github.com/cloudfoundry/gorouter/metrics"
 	"github.com/cloudfoundry/gorouter/route"
 	"github.com/cloudfoundry/gorouter/route_service"
+	steno "github.com/cloudfoundry/gosteno"
 	"github.com/pivotal-golang/lager"
 )
 
@@ -63,7 +64,7 @@ type ProxyArgs struct {
 type proxy struct {
 	ip                         string
 	traceKey                   string
-	logger                     lager.Logger
+	logger                     *steno.Logger
 	registry                   LookupRegistry
 	reporter                   metrics.ProxyReporter
 	accessLogger               access_log.AccessLogger
@@ -82,7 +83,7 @@ func NewProxy(args ProxyArgs) Proxy {
 		accessLogger: args.AccessLogger,
 		traceKey:     args.TraceKey,
 		ip:           args.Ip,
-		logger:       args.Logger,
+		logger:       steno.NewLogger("router.proxy"),
 		registry:     args.Registry,
 		reporter:     args.Reporter,
 		transport: &http.Transport{
@@ -156,7 +157,7 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 	request.Body = requestBodyCounter
 
 	proxyWriter := NewProxyResponseWriter(responseWriter)
-	handler := NewRequestHandler(p.logger, request, proxyWriter, p.reporter, &accessLog)
+	handler := NewRequestHandler(request, proxyWriter, p.reporter, &accessLog)
 
 	defer func() {
 		accessLog.RequestBytesReceived = requestBodyCounter.GetCount()
@@ -186,7 +187,7 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 
 		afterNext: func(endpoint *route.Endpoint) {
 			if endpoint != nil {
-				handler.Logger().Info("", lager.Data{"RouteEndpoint": endpoint.ToLogData()})
+				handler.Logger().Set("RouteEndpoint", endpoint.ToLogData())
 				accessLog.RouteEndpoint = endpoint
 				p.reporter.CaptureRoutingRequest(endpoint, request)
 			}

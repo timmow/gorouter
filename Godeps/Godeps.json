@@ -136,6 +136,10 @@
 		{
 			"ImportPath": "golang.org/x/crypto/pbkdf2",
 			"Rev": "c8b9e6388ef638d5a8a9d865c634befdc46a6784"
+		},
+		{
+			"ImportPath": "github.com/armon/go-proxyproto",
+			"Rev": "609d6338d3a76ec26ac3fe7045a164d9a58436e7"
 		}
 	]
 }
